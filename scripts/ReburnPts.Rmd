@@ -1,0 +1,51 @@
+---
+title: "Add Fire Details to Points"
+author: "Anna Talucci"
+date: "2023-07-28"
+output: html_document
+---
+
+# Overview
+Organize shapefile data that feeds into other scripts
+
+Combine Canadian fire perimetes
+
+
+# Packages
+```{r}
+library(sf)
+library(tidyverse)
+```
+
+# Data 
+## Canada Fire perimetes
+```{r}
+skfires = st_read("../data/firePerimeters/SKFires1986-2021.shp", "SKFires1986-2021")
+```
+
+```{r}
+reburnpts = st_read("../data/reburnPts/skReburnpt.shp", "skReburnpt")
+```
+
+# Reproject
+```{r}
+proj = st_crs(skfires)
+
+```
+
+```{r}
+pts = st_transform(reburnpts, proj) %>% dplyr::mutate(RID = row_number())
+```
+
+```{r}
+pts
+```
+
+# Join
+```{r}
+join = st_join(pts, skfires)
+```
+
+```{r}
+join %>% dplyr::select(sum, RID, NFIREID, PRENAME, AFSDATE, AFEDATE) %>% group_by(RID) %>% pivot_wider()
+```

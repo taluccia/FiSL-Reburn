@@ -1,0 +1,292 @@
+---
+title: "Sampled Points"
+author: "Anna Talucci"
+date: "2023-07-31"
+output: html_document
+---
+
+# Overview
+
+# Packages
+```{r}
+library(tidyverse)
+```
+
+# Data
+```{r}
+temp = read.csv("../data/sampledPts/temp/meanSampledST2013.csv")
+dnbr = read.csv("../data/sampledPts/dnbr/dNBR2013.csv")
+alb = read.csv("../data/sampledPts/albedo/medianAlbedo2013.csv")
+```
+
+```{r}
+templist <- list.files(path="../data/sampledPts/temp",pattern='csv$', full.names = TRUE)
+dnbrlist <- list.files(path="../data/sampledPts/dnbr",pattern='csv$', full.names = TRUE)
+alblist <- list.files(path="../data/sampledPts/albedo",pattern='csv$', full.names = TRUE)
+```
+
+### Name items in a list with file name
+```{r}
+names(templist) <- tools::file_path_sans_ext(basename(templist))
+names(dnbrlist) <- tools::file_path_sans_ext(basename(dnbrlist))
+names(alblist) <- tools::file_path_sans_ext(basename(alblist))
+```
+
+
+# View DF
+```{r}
+temp
+```
+
+```{r}
+dnbr
+```
+
+```{r}
+alb
+```
+
+# Select columns and combine data frames
+
+## Functions for lists
+
+    map2(.,  ~mutate(ptID = stri_rand_strings(n(), 8)))
+```{r}
+orgTemp <- function(list){ 
+  purrr::map(list, read_csv) %>%
+  map2(names(.), ~mutate(.x, FXN = .y)) %>%
+  bind_rows() %>%
+  mutate(YrSamp = as.numeric(str_extract(FXN, "[0-9]+"))) %>%
+    dplyr::select(-.geo, -count, -longitude, -latitude, -max, -min, -median,-sum) 
+}
+
+```
+
+```{r}
+orgDnbr <- function(list){ 
+  purrr::map(list, read_csv) %>%
+  map2(names(.), ~mutate(.x, FXN = .y)) %>%
+  bind_rows() %>%
+  mutate(YrSamp = as.numeric(str_extract(FXN, "[0-9]+"))) %>%
+    dplyr::select(-.geo, -count, -longitude, -latitude, -max, -min, -median,-sum) 
+}
+
+```
+   map(., ~ .x %>% mutate(rowID = row_number())) %>%
+```{r}
+orgAlb <- function(list){ 
+  purrr::map(list, read_csv) %>%
+  map2(names(.), ~mutate(.x, FXN = .y)) %>%
+  bind_rows() %>%
+  mutate(YrSamp = as.numeric(str_extract(FXN, "[0-9]+"))) %>%
+    dplyr::select(-.geo)
+}
+
+```
+
+## Apply function to list 
+```{r}
+templist
+```
+```{r}
+allTemp = orgTemp(templist)
+```
+
+```{r}
+allTemp
+```
+```{r}
+allDnbr = orgDnbr(dnbrlist)
+```
+
+```{r}
+allDnbr
+```
+
+```{r}
+allAlb = orgAlb(alblist)
+```
+
+```{r}
+allAlb
+```
+
+## Individual Dataframe
+```{r}
+temp1 = temp%>% dplyr::select(system.index, ST_L8)
+dnbr1 = dnbr%>% dplyr::select(system.index, dNBR)
+```
+
+```{r}
+allData = allAlb %>% 
+  group_by(YrSamp) %>%
+  left_join(., allTemp, by = ("system:index")) %>%
+  left_join(., allDnbr, by = ("system:index")) %>%
+  dplyr::select(-FXN.x, -FXN.y, -FXN, -YrSamp.x, -YrSamp.y)
+  
+```
+
+# Add Burned unburned class
+
+
+```{r}
+allData
+```
+```{r}
+min(allData$dNBR)
+max(allData$dNBR)
+```
+
+
+
+```{r}
+allData1 = allData %>% 
+  mutate(albedo = albedo/10000) %>%
+  mutate( burned = ifelse(between(dNBR,-283,-0),"unburned",
+            ifelse(between(dNBR,0,100),"unburned",
+            ifelse(between(dNBR,101,495),"burned", "no")))) %>%
+  mutate(xBurns = sum-max-min) %>%
+  mutate(reburn = ifelse(xBurns ==0, "twice",
+                         ifelse(xBurns %in% c(1988, 1992, 1993, 1994, 1995, 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010, 2011, 2012, 2013, 2014, 2015), "three","other" ))) %>%
+  mutate(lag1 = max-min) 
+  
+
+
+```
+
+```{r}
+allData1
+```
+```{r}
+min(allData1$xBurns)
+max(allData1$xBurns)
+```
+```{r}
+reburnValues = allData1 %>% filter(reburn=="other")
+sort(unique(reburnValues$xBurns))
+```
+
+```{r}
+sort(c(1988, 1994, 2002, 2001, 2006, 1995, 1998, 2008, 2010, 2000, 2012, 2011, 1992,  1993,  1999, 2003,  2004,  2005,  2007,  2009,  2013,  2014,  2015 ))
+```
+
+```{r}
+sort(unique(allData1$lag1))
+```
+
+
+# Calculated fire lag
+
+# Summarize
+
+```{r}
+allData1 %>% group_by(burned) %>%
+  summarize(ct = n())
+```
+
+```{r}
+allData1 %>% group_by(reburn) %>%
+  summarize(ct = n())
+```
+# Filter out odd values
+```{r}
+allData2 = allData1 %>% 
+  filter(burned!='no') %>%
+  filter(reburn!="other") %>%
+  filter(lag1>0)
+```
+
+```{r}
+allData2 %>% group_by(burned) %>%
+  summarize(ct = n())
+```
+
+```{r}
+allData2 %>% group_by(reburn) %>%
+  summarize(ct = n())
+```
+
+```{r}
+allData2
+```
+
+
+# Explore data
+```{r}
+
+
+ggplot(allData2, aes(x = burned, y=albedo)) +
+  geom_violin() + 
+  
+  geom_boxplot(width=0.1) +
+  stat_summary(fun=mean, geom="point", shape=23, size=2, color="red") +
+  labs(x="", y="albedo")
+  
+
+```
+
+```{r}
+
+
+ggplot(allData2, aes(x = burned, y=ST_L8)) +
+  geom_violin() + 
+  
+  geom_boxplot(width=0.1) +
+  stat_summary(fun=mean, geom="point", shape=23, size=2, color="red") +
+  labs(x="", y="Temperature")
+  
+
+```
+
+```{r}
+
+
+ggplot(allData2, aes(x = reburn, y=ST_L8)) +
+  geom_violin() + 
+  
+  geom_boxplot(width=0.1) +
+  stat_summary(fun=mean, geom="point", shape=23, size=2, color="red") +
+  labs(x="", y="Temperature")
+  
+
+```
+
+```{r}
+
+
+ggplot(allData2, aes(x = reburn, y=albedo)) +
+  geom_violin() + 
+  
+  geom_boxplot(width=0.1) +
+  stat_summary(fun=mean, geom="point", shape=23, size=2, color="red") +
+  labs(x="", y="Temperature")
+  
+
+```
+
+```{r}
+allData2 %>% 
+  filter(reburn=="twice") %>%
+  filter(burned=="burned") %>%
+ggplot(., aes(x = dNBR, y=albedo)) +
+  geom_point() + 
+  labs(x="dNBR", y="albedo")
+```
+
+```{r}
+allData2 %>% 
+  filter(reburn=="twice") %>%
+  filter(burned=="burned") %>%
+ggplot(., aes(x = dNBR, y=ST_L8)) +
+  geom_point() + 
+  labs(x="dNBR", y="temp")
+```
+
+```{r}
+allData2 %>% 
+  filter(reburn=="twice") %>%
+  filter(burned=="burned") %>%
+ggplot(., aes(x = as.character(lag1), y=albedo)) +
+  geom_boxplot() + 
+  labs(x="lag between 1st and 2nd fire", y="albedo")
+```

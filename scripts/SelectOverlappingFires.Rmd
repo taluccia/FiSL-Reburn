@@ -1,0 +1,232 @@
+---
+title: "Select over lapping fires"
+author: "Anna Talucci"
+date: "2023-06-16"
+output: html_document
+---
+
+
+# Overview
+
+This script generates the burned area  for within the landscape area
+
+# Packages
+```{r}
+library(terra)
+library(gdalUtilities)
+library(sf)
+library(tidyverse)
+library(viridis)
+library(RColorBrewer)
+library(leaflet)
+```
+
+
+## USA Fire perimeters
+```{r}
+UsaFires = st_read("../data/mtbs_perimeter_data/mtbs_perims_DD.shp", "mtbs_perims_DD")
+```
+
+```{r}
+CanFires = st_read("../data/firePerimeters/CanadaFires1986-2021.shp", "CanadaFires1986-2021")
+```
+
+# Filter for SK
+
+```{r}
+skFiresv2 = CanFires %>% filter(PRENAME=="Saskatchewan")
+```
+
+# overlap
+
+```{r}
+st_overlaps(skFiresv2)
+```
+
+
+
+
+
+# Intersection
+```{r}
+overlapSKv2 = skFiresv2 %>%
+  st_as_sf %>% 
+  st_make_valid() %>%
+   split(., .$YEAR) %>% 
+  map(st_overlap) %>% 
+  bind_rows() 
+```
+
+```{r}
+overlapSKv2
+```
+
+```{r}
+intersectSKv2 = skFiresv2 %>%
+  st_as_sf %>% 
+  st_make_valid() %>%
+   split(., .$YEAR) %>% 
+  map(st_intersection) %>% 
+  bind_rows() 
+```
+
+```{r}
+intersectSKv2
+```
+```{r}
+( filterReburn = intersectSKv2 %>% filter(n.overlaps>1) )
+```
+
+## intersection for all
+```{r}
+( 
+  intersectAll = allFires %>%
+  st_as_sf %>% 
+  st_make_valid() %>%
+   split(., .$YEAR) %>% 
+  map(st_intersection) %>% 
+  bind_rows() 
+)
+```
+
+
+
+# Map
+```{r}
+skwgs = st_transform(skFiresv2, 4326)
+```
+
+```{r}
+skSmall = skwgs %>% filter(NFIREID %in% c(699, 443,609, 2937, 432, 2939, 705, 838))
+```
+
+699, 443,609, 2937, 432, 2939, 705, 838
+```{r}
+pal <- colorBin(palette = "Reds", 
+                domain = skwgs$YEAR, n = 5) # split colors from white to red into 9 even bins
+
+leaflet() %>% addTiles() %>% 
+  addPolygons(data = skwgs, 
+              label= ~NFIREID, 
+              color = "gray", # the color of the border
+              fillColor = ~pal(skwgs$YEAR), 
+              weight = 1.0, # the thickness of the border lines
+              opacity = .5, # the transparency of the border lines
+              fillOpacity = 0.5) # the transparency inside the polygons) 
+```
+
+```{r}
+pal <- colorBin(palette = "Reds", 
+                domain = skwgs$YEAR, n = 5) # split colors from white to red into 9 even bins
+
+leaflet() %>% addTiles() %>% 
+  addPolygons(data = skSmall, 
+              label= ~NFIREID, 
+              color = "gray", # the color of the border
+              fillColor = ~pal(skwgs$YEAR), 
+              weight = 1.0, # the thickness of the border lines
+              opacity = .5, # the transparency of the border lines
+              fillOpacity = 0.5) # the transparency inside the polygons) 
+```
+
+
+```{r}
+ggplot() +
+  geom_sf(data = filterReburn, fill=NA, color = "orange", alpha = .5) +
+    coord_sf()
+```
+
+
+```{r}
+ggplot() +
+  geom_sf(data = skFires, fill=NA, color = "orange", alpha = .5) +
+    coord_sf()
+```
+
+#### **DELETE**
+```{r}
+ggplot() +
+  geom_sf(data = skFires96, fill=NA, color = "blue") +
+  geom_sf(data = skFires19, fill=NA, color = "blue") +
+  geom_sf(data = test, fill=NA, color = "orange", alpha=.5) +
+    coord_sf()
+```
+
+```{r}
+my_breaks=c(1996, 2006, 2016, 2022)
+ggplot(skFires) +
+  geom_sf(aes(color=YEAR) ) +
+    coord_sf()
+```
+
+
+## AK Fiddle
+```{r}
+ak = akFires %>% dplyr::select(Event_ID, fireYr, geometry) 
+```
+
+```{r}
+ak
+```
+# Reproject
+
+```{r}
+ak_proj = st_transform(ak, crs = 3338)
+```
+
+```{r eval=FALSE, include=FALSE}
+( aktest1 = st_intersection(ak, ak) )
+
+```
+
+
+```{r}
+ak_buf = st_buffer(ak_proj, 200)
+```
+
+
+```{r}
+( aktest2 = ak_buf %>%
+  st_as_sf %>% 
+  split(., .$fireYr) %>% 
+  map(st_intersection) %>% 
+  bind_rows %>% 
+  filter(
+    n.overlaps > 1
+  )
+)
+```
+
+```{r}
+st_geometry_type(aktest2) 
+```
+
+```{r}
+st_is_valid(aktest2, reason = TRUE)
+```
+
+```{r}
+st_is(aktest2, "POLYGON")
+```
+
+```{r eval=FALSE, include=FALSE}
+st_write(aktest2, "../outputs/AkTest2.shp", driver="ESRI Shapefile")
+```
+
+```{r}
+( canOverlap = st_overlaps(allFires) )
+```
+
+```{r}
+plot(st_geometry(akOverlap))
+```
+
+
+
+# Map
+
+```{r}
+ggplot() +
+  geom_sf(data = aktest2, fill=NA, color = "orange") +
+    coord_sf()
+```

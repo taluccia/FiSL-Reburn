@@ -1,0 +1,88 @@
+---
+title: "OrganizeSHPData"
+author: "Anna Talucci"
+date: "2023-07-20"
+output: html_document
+---
+
+# Overview
+Organize shapefile data that feeds into other scripts
+
+Combine Canadian fire perimetes
+
+
+# Packages
+```{r}
+library(sf)
+library(tidyverse)
+```
+
+# Data 
+## Canada Fire perimetes
+```{r}
+CanFires = st_read("../data/nbac_1986_to_2020/nbac_1986_to_2020_20210810.shp", "nbac_1986_to_2020_20210810")
+CanFires2021 = st_read("../data/nbac_2021/nbac_2021_r9_20220624.shp", "nbac_2021_r9_20220624")
+```
+
+## Canada Proviences
+```{r}
+prov = st_read("../data/lpr_000b16a_e/lpr_000b16a_e.shp", "lpr_000b16a_e")
+```
+
+# Projection
+```{r}
+proj = st_crs(CanFires)
+```
+
+# Reproject
+```{r}
+prov = st_transform(prov, proj)
+```
+
+# Clean Canadian Fires
+##Select columns and bind all fires canadian
+```{r}
+( CanFires1 = CanFires %>% dplyr::select(-BASRC_1, -new_flg) )
+```
+
+```{r}
+( allFires = bind_rows(CanFires1, CanFires2021) %>% dplyr::select(-COMMENTS) )
+```
+
+## Join provinces to fires
+```{r}
+prov
+```
+
+```{r}
+(fire = st_join(allFires, prov))
+```
+```{r}
+( firev1 = fire %>% dplyr::select(YEAR:PRUID, PRENAME, geometry))
+```
+## Write to shp
+```{r }
+st_write(firev1, "../outputs/CanadaFires1986-2021.shp", driver="ESRI Shapefile")
+```
+# Filter for SK
+```{r}
+(skFires = firev1 %>% filter(PRENAME=="Saskatchewan"))
+```
+
+```{r }
+st_write(skFires, "../outputs/SKFires1986-2021.shp", driver="ESRI Shapefile")
+```
+##  Alaska Fires
+
+```{r}
+( akFires = UsaFires %>% filter(BurnBndLat > 50) %>%
+  dplyr::mutate(fireYr = lubridate::year(Ig_Date), 
+                month = lubridate::month(Ig_Date), 
+                day = lubridate::day(Ig_Date)) %>%
+    filter(fireYr>= 1986) )
+```
+
+
+```{r eval=FALSE, include=FALSE}
+st_write(akFires, "../outputs/AkFires1986-2021.shp", driver="ESRI Shapefile")
+```
