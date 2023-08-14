@@ -25,6 +25,11 @@ dnbrlist <- list.files(path="../data/sampledPts/dnbr",pattern='csv$', full.names
 alblist <- list.files(path="../data/sampledPts/albedo",pattern='csv$', full.names = TRUE)
 ```
 
+```{r}
+templist1 <- list.files(path="../data/sampledPts/once/temp",pattern='csv$', full.names = TRUE)
+dnbrlist1 <- list.files(path="../data/sampledPts/once/dnbr",pattern='csv$', full.names = TRUE)
+alblist1 <- list.files(path="../data/sampledPts/once/albedo",pattern='csv$', full.names = TRUE)
+```
 ### Name items in a list with file name
 ```{r}
 names(templist) <- tools::file_path_sans_ext(basename(templist))
@@ -32,6 +37,11 @@ names(dnbrlist) <- tools::file_path_sans_ext(basename(dnbrlist))
 names(alblist) <- tools::file_path_sans_ext(basename(alblist))
 ```
 
+```{r}
+names(templist1) <- tools::file_path_sans_ext(basename(templist1))
+names(dnbrlist1) <- tools::file_path_sans_ext(basename(dnbrlist1))
+names(alblist1) <- tools::file_path_sans_ext(basename(alblist1))
+```
 
 # View DF
 ```{r}
@@ -110,6 +120,44 @@ allAlb = orgAlb(alblist)
 ```{r}
 allAlb
 ```
+## Once
+```{r}
+orgTemp1 <- function(list){ 
+  purrr::map(list, read_csv) %>%
+  map2(names(.), ~mutate(.x, FXN = .y)) %>%
+  bind_rows() %>%
+  mutate(YrSamp = as.numeric(str_extract(FXN, "[0-9]+"))) %>%
+    dplyr::select(-.geo,  -longitude, -latitude, -min) 
+}
+
+```
+
+```{r}
+orgDnbr1 <- function(list){ 
+  purrr::map(list, read_csv) %>%
+  map2(names(.), ~mutate(.x, FXN = .y)) %>%
+  bind_rows() %>%
+  mutate(YrSamp = as.numeric(str_extract(FXN, "[0-9]+"))) %>%
+    dplyr::select(-.geo,  -longitude, -latitude,  -min ) 
+}
+
+```
+   map(., ~ .x %>% mutate(rowID = row_number())) %>%
+```{r}
+orgAlb1 <- function(list){ 
+  purrr::map(list, read_csv) %>%
+  map2(names(.), ~mutate(.x, FXN = .y)) %>%
+  bind_rows() %>%
+  mutate(YrSamp = as.numeric(str_extract(FXN, "[0-9]+"))) %>%
+    dplyr::select(-.geo)
+}
+
+```
+```{r}
+allTemp1 = orgTemp1(templist1)
+allDnbr1 = orgDnbr1(dnbrlist1)
+allAlb1 = orgAlb1(alblist1)
+```
 
 ## Individual Dataframe
 ```{r}
@@ -117,6 +165,7 @@ temp1 = temp%>% dplyr::select(system.index, ST_L8)
 dnbr1 = dnbr%>% dplyr::select(system.index, dNBR)
 ```
 
+# Combine all Dataframes
 ```{r}
 allData = allAlb %>% 
   group_by(YrSamp) %>%
@@ -126,6 +175,15 @@ allData = allAlb %>%
   
 ```
 
+## Once
+```{r}
+allDataOne = allAlb1 %>% 
+  group_by(YrSamp) %>%
+  left_join(., allTemp1, by = ("system:index")) %>%
+  left_join(., allDnbr1, by = ("system:index")) %>%
+  dplyr::select(-FXN.x, -FXN.y, -FXN, -YrSamp.x, -YrSamp.y)
+  
+```
 # Add Burned unburned class
 
 
@@ -135,6 +193,8 @@ allData
 ```{r}
 min(allData$dNBR)
 max(allData$dNBR)
+min(allDataOne$dNBR)
+max(allDataOne$dNBR)
 ```
 
 
@@ -174,8 +234,62 @@ sort(c(1988, 1994, 2002, 2001, 2006, 1995, 1998, 2008, 2010, 2000, 2012, 2011, 1
 sort(unique(allData1$lag1))
 ```
 
+```{r}
+allDataOnce1 = allDataOne %>% 
+  mutate(albedo = albedo/10000) %>%
+  mutate( burned = ifelse(between(dNBR,-283,-0),"unburned",
+            ifelse(between(dNBR,0,100),"unburned",
+            ifelse(between(dNBR,101,495),"burned", "no")))) 
 
-# Calculated fire lag
+
+
+```
+
+# Summary stats
+
+```{r}
+allData1 %>% 
+  filter(burned=='burned') %>%
+  filter(reburn!="other") %>%
+  filter(YrSamp %in% c(2014, 2015, 2016, 2017)) %>%
+  filter(lag1>0) %>%
+  group_by(YrSamp) %>%
+  summarize(meanAlbedo= mean(albedo), 
+            meanTemp = mean(ST_L8), 
+            meandNBR = mean(dNBR))
+```
+
+```{r}
+allData1 %>% 
+  filter(burned=='unburned') %>%
+  filter(reburn!="other") %>%
+  filter(YrSamp %in% c(2014, 2015, 2016, 2017)) %>%
+  filter(lag1>0) %>%
+  group_by(YrSamp) %>%
+  summarize(meanAlbedo= mean(albedo), 
+            meanTemp = mean(ST_L8), 
+            meandNBR = mean(dNBR))
+```
+
+```{r}
+allDataOnce1 %>% 
+  filter(burned=='burned') %>%
+  filter(YrSamp %in% c(2014, 2015, 2016, 2017)) %>%
+  group_by(YrSamp) %>%
+  summarize(meanAlbedo= mean(albedo), 
+            menaTemp = mean(ST_L8), 
+            meandNBR = mean(dNBR))
+```
+
+```{r}
+allDataOnce1 %>% 
+  filter(burned=='unburned') %>%
+  filter(YrSamp %in% c(2014, 2015, 2016, 2017)) %>%
+  group_by(YrSamp) %>%
+  summarize(meanAlbedo= mean(albedo), 
+            menaTemp = mean(ST_L8), 
+            meandNBR = mean(dNBR))
+```
 
 # Summarize
 

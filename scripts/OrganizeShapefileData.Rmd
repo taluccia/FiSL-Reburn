@@ -10,14 +10,23 @@ Organize shapefile data that feeds into other scripts
 
 Combine Canadian fire perimetes
 
-
+join Ecoregions to perimeters
+simplify perimeters
 # Packages
 ```{r}
 library(sf)
 library(tidyverse)
+library(magrittr)
+library(pacman)
 ```
 
 # Data 
+## AK Fires
+```{r}
+AKFires = st_read("../data/mtbs_perims_DD.shp", "mtbs_perims_DD")
+
+```
+
 ## Canada Fire perimetes
 ```{r}
 CanFires = st_read("../data/nbac_1986_to_2020/nbac_1986_to_2020_20210810.shp", "nbac_1986_to_2020_20210810")
@@ -29,17 +38,36 @@ CanFires2021 = st_read("../data/nbac_2021/nbac_2021_r9_20220624.shp", "nbac_2021
 prov = st_read("../data/lpr_000b16a_e/lpr_000b16a_e.shp", "lpr_000b16a_e")
 ```
 
+## Ecoregions
+```{r}
+ecor = st_read("../data/ecoLevel2/NA_CEC_Eco_Level2.shp", "NA_CEC_Eco_Level2")
+```
+
+
 # Projection
 ```{r}
-proj = st_crs(CanFires)
+projEA = st_crs(ecor)
 ```
 
-# Reproject
+# Ak 
+## Find Munson creek fire
 ```{r}
-prov = st_transform(prov, proj)
+munson = AKFires %>% filter(BurnBndLat>50) %>% 
+  dplyr::mutate(year = lubridate::year(Ig_Date), 
+                month = lubridate::month(Ig_Date), 
+                day = lubridate::day(Ig_Date)) %>%
+  filter(year==2021) %>%
+  filter(Incid_Name =="MUNSON CREEK")
 ```
 
-# Clean Canadian Fires
+```{r}
+unique(munson$Incid_Name)
+```
+```{r }
+st_write(munson, "../outputs/MunsonCreek2021.shp", driver="ESRI Shapefile")
+```
+
+# Combine Canadian Fires
 ##Select columns and bind all fires canadian
 ```{r}
 ( CanFires1 = CanFires %>% dplyr::select(-BASRC_1, -new_flg) )
@@ -49,21 +77,55 @@ prov = st_transform(prov, proj)
 ( allFires = bind_rows(CanFires1, CanFires2021) %>% dplyr::select(-COMMENTS) )
 ```
 
-## Join provinces to fires
+
+# Reproject
 ```{r}
-prov
+prov = st_transform(prov, projEA)
+firesCA = st_transform(allFires, projEA)
 ```
 
+# Join provinces to fires
+
+
 ```{r}
-(fire = st_join(allFires, prov))
+(
+  fire = st_join(firesCA, prov) %>% 
+    st_join(., ecor)
+   )
 ```
 ```{r}
-( firev1 = fire %>% dplyr::select(YEAR:PRUID, PRENAME, geometry))
+( firev1 = fire %>% dplyr::select(YEAR:PRUID, PRENAME, NA_L2CODE, NA_L2NAME, NA_L1CODE, NA_L1NAME, geometry))
 ```
-## Write to shp
+
+
+
+
+# Write to shp
 ```{r }
 st_write(firev1, "../outputs/CanadaFires1986-2021.shp", driver="ESRI Shapefile")
 ```
+```{r}
+firev1 = st_read("../outputs/CanadaFires1986-2021.shp", "CanadaFires1986-2021")
+```
+# Simplify
+```{r}
+mv_simpl <- st_simplify(firev1, preserveTopology = TRUE,
+                        dTolerance = 500)
+```
+
+
+```{r}
+simpFire4326 = st_transform(mv_simpl, crs=4326)
+
+```
+
+```{r }
+st_write(simpFire4326, "../outputs/CanadaFires4326Simp1986-2021.shp", driver="ESRI Shapefile")
+```
+# Add Alaska
+
+# Simplify polygons
+Need to reduce some of the vertices of the polygons
 # Filter for SK
 ```{r}
 (skFires = firev1 %>% filter(PRENAME=="Saskatchewan"))
