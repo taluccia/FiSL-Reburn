@@ -50,7 +50,7 @@ rsconnect/
 
 **/.DS_Store
 **/._.DS_Store
-**/._PCN-FireSynthesis.Rproj
+**/._FiSL-Reburn.Rproj
 # exclude specific folders from push to github
 figures/*
 images/*
