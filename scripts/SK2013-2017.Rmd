@@ -1,0 +1,482 @@
+---
+title: "SK 2013-2017"
+author: "Anna Talucci"
+date: "2023-09-29"
+output: html_document
+---
+
+
+
+# Overview
+
+# Packages
+```{r}
+library(tidyverse)
+```
+
+# Data
+
+dnbrlist <- list.files(path="../data/sampledPts/dnbr",pattern='csv$', full.names = TRUE)
+```{r}
+dnbrlist1 <- list.files(path="../data/sampledPts/once/dnbr",pattern='csv$', full.names = TRUE)
+dnbrlist2 <- list.files(path="../data/sampledPts/dnbr",pattern='csv$', full.names = TRUE)
+```
+
+```{r}
+tempspringlist1 <- list.files(path="../data/skLST/onceBurned/spring",pattern='csv$', full.names = TRUE)
+tempsummerlist1 <- list.files(path="../data/skLST/onceBurned/summer",pattern='csv$', full.names = TRUE)
+albspringlist1 <- list.files(path="../data/skAlbedo/onceBurned/spring",pattern='csv$', full.names = TRUE)
+albsummerlist1 <- list.files(path="../data/skAlbedo/onceBurned/summer",pattern='csv$', full.names = TRUE)
+```
+
+```{r}
+tempspringlist2 <- list.files(path="../data/skLST/twiceBurned/spring", pattern='csv$', full.names = TRUE)
+tempsummerlist2 <- list.files(path="../data/skLST/twiceBurned/summer", pattern='csv$', full.names = TRUE)
+```
+
+```{r}
+lstSp2013 = read_csv("../data/skLST/twiceBurned/spring/LSTReburnSpringMean2013.csv")
+lstSp2014 = read_csv("../data/skLST/twiceBurned/spring/LSTReburnSpringMean2014.csv")
+lstSp2015 = read_csv("../data/skLST/twiceBurned/spring/LSTReburnSpringMean2015.csv")
+lstSp2016 = read_csv("../data/skLST/twiceBurned/spring/LSTReburnSpringMean2016.csv")
+```
+```{r}
+albspringlist2 <- list.files(path="../data/skAlbedo/twiceBurned/spring",pattern='csv$', full.names = TRUE)
+albsummerlist2 <- list.files(path="../data/skAlbedo/twiceBurned/summer",pattern='csv$', full.names = TRUE)
+```
+### Name items in a list with file name
+names(dnbrlist) <- tools::file_path_sans_ext(basename(dnbrlist))
+```{r}
+names(tempspringlist1) <- tools::file_path_sans_ext(basename(tempspringlist1))
+names(tempsummerlist1) <- tools::file_path_sans_ext(basename(tempsummerlist1))
+names(albspringlist1) <- tools::file_path_sans_ext(basename(albspringlist1))
+names(albsummerlist1) <- tools::file_path_sans_ext(basename(albsummerlist1))
+```
+
+```{r}
+names(tempspringlist2) <- tools::file_path_sans_ext(basename(tempspringlist2))
+names(tempsummerlist2) <- tools::file_path_sans_ext(basename(tempsummerlist2))
+names(albspringlist2) <- tools::file_path_sans_ext(basename(albspringlist2))
+names(albsummerlist2) <- tools::file_path_sans_ext(basename(albsummerlist2))
+```
+
+```{r}
+tempspringlist2
+```
+
+```{r}
+names(dnbrlist1) <- tools::file_path_sans_ext(basename(dnbrlist1))
+names(dnbrlist2) <- tools::file_path_sans_ext(basename(dnbrlist2))
+```
+
+# Select columns and combine data frames
+## dnbr
+```{r}
+orgDnbr1 <- function(list){ 
+  purrr::map(list, read_csv) %>%
+  map2(names(.), ~mutate(.x, FXN = .y)) %>%
+  bind_rows() %>%
+  mutate(YrSamp = as.numeric(str_extract(FXN, "[0-9]+"))) %>%
+    dplyr::select(-.geo,  -longitude, -latitude,  -min ) 
+}
+
+dnbr1 = orgDnbr1(dnbrlist1)
+```
+
+```{r}
+orgDnbr2 <- function(list){ 
+  purrr::map(list, read_csv) %>%
+  map2(names(.), ~mutate(.x, FXN = .y)) %>%
+  bind_rows() %>%
+  mutate(YrSamp = as.numeric(str_extract(FXN, "[0-9]+"))) %>%
+    dplyr::select(-.geo, -count, -longitude, -latitude, -max, -min, -median,-sum) 
+}
+
+dnbr2 = orgDnbr2(dnbrlist2)
+```
+
+## New data
+
+```{r}
+orgTempSpring1 <- function(list){ 
+  purrr::map(list, read_csv) %>%
+  map2(names(.), ~mutate(.x, FXN = .y)) %>%
+  bind_rows() %>%
+  mutate(YrSamp = as.numeric(str_extract(FXN, "[0-9]+"))) %>%
+    dplyr::select(-.geo) 
+}
+
+allTempSpring1 = orgTempSpring1(tempspringlist1)
+```
+
+```{r}
+orgTempSpring2 <- function(list){ 
+  purrr::map(list, read_csv) %>%
+  map2(names(.), ~mutate(.x, FXN = .y)) %>%
+  bind_rows() %>%
+  dplyr::mutate(YrSamp = as.numeric(str_extract(FXN, "[0-9]+"))) %>%
+    dplyr::select(-.geo) 
+}
+
+
+allTempSpring2 = orgTempSpring2(tempspringlist2)
+```
+
+```{r}
+orgAlbSpring1 <- function(list){ 
+  purrr::map(list, read_csv) %>%
+  map2(names(.), ~mutate(.x, FXN = .y)) %>%
+  bind_rows() %>%
+  mutate(YrSamp = as.numeric(str_extract(FXN, "[0-9]+"))) %>%
+    dplyr::select(-.geo, -FXN)
+}
+
+allAlbSpring1 = orgAlbSpring1(albspringlist1)
+```
+
+```{r}
+orgAlbSpring2 <- function(list){ 
+  purrr::map(list, read_csv) %>%
+  map2(names(.), ~mutate(.x, FXN = .y)) %>%
+  bind_rows() %>%
+  mutate(YrSamp = as.numeric(str_extract(FXN, "[0-9]+"))) %>%
+    dplyr::select(-.geo, -FXN)
+}
+
+
+allAlbSpring2 = orgAlbSpring2(albspringlist2)
+```
+
+
+
+# Dataframes
+
+## Albedo
+```{r}
+allAlbSpring1 
+allAlbSpring2
+```
+
+```{r}
+aspo = allAlbSpring1 %>% 
+  mutate(burn = "once") %>% 
+  mutate(season='spring') %>% 
+  mutate(albedo = albedo/10000) %>% 
+  group_by(YrSamp) %>%
+  left_join(., dnbr1, by = ("system:index")) %>%
+  dplyr::select(-FXN, -YrSamp.x) %>%
+  mutate( burned = ifelse(between(dNBR,-283,-0),"unburned",
+            ifelse(between(dNBR,0,100),"unburned",
+            ifelse(between(dNBR,101,495),"burned", "no"))))
+```
+
+```{r}
+aspr = allAlbSpring2 %>% 
+  mutate(burn = "twice") %>% 
+  mutate(season='spring') %>% 
+  mutate(albedo = albedo/10000) %>% 
+  mutate(xBurns = sum-max-min) %>%
+  mutate(reburn = ifelse(xBurns ==0, "twice",
+                         ifelse(xBurns %in% c(1988, 1992, 1993, 1994, 1995, 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010, 2011, 2012, 2013, 2014, 2015), "three","other" ))) %>%
+  mutate(lag1 = max-min) %>% 
+  group_by(YrSamp) %>%
+  left_join(., dnbr2, by = ("system:index")) %>%
+  dplyr::select(-FXN, -YrSamp.x) %>%
+  mutate( burned = ifelse(between(dNBR,-283,-0),"unburned",
+            ifelse(between(dNBR,0,100),"unburned",
+            ifelse(between(dNBR,101,495),"burned", "no"))))
+```
+
+```{r}
+aspo
+aspr
+```
+```{r}
+asp = rbind(aspo, aspr)
+```
+
+
+
+## dnbr
+```{r}
+dnbr = rbind(dnbr1, dnbr2)
+```
+
+```{r}
+dnbr
+```
+# Combine Dataframes
+```{r}
+albedoDnbr = albedoSpring %>% 
+  group_by(YrSamp) %>%
+  left_join(., dnbr, by = ("system:index")) %>%
+  dplyr::select(-FXN, -YrSamp.x)
+  
+```
+```{r}
+albedoDnbr
+```
+## Once
+
+allDataOne = allAlb1 %>% 
+  group_by(YrSamp) %>%
+  left_join(., allTemp1, by = ("system:index")) %>%
+  left_join(., allDnbr1, by = ("system:index")) %>%
+  dplyr::select(-FXN.x, -FXN.y, -FXN, -YrSamp.x, -YrSamp.y)
+  
+
+# Add Burned unburned class
+
+
+```{r}
+allData
+```
+```{r}
+min(allData$dNBR)
+max(allData$dNBR)
+min(allDataOne$dNBR)
+max(allDataOne$dNBR)
+```
+
+
+
+```{r}
+albedoDnbr1 = albedoDnbr %>% 
+  mutate( burned = ifelse(between(dNBR,-283,-0),"unburned",
+            ifelse(between(dNBR,0,100),"unburned",
+            ifelse(between(dNBR,101,495),"burned", "no")))) %>%
+  mutate(xBurns = sum-max-min) %>%
+  mutate(reburn = ifelse(xBurns ==0, "twice",
+                         ifelse(xBurns %in% c(1988, 1992, 1993, 1994, 1995, 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010, 2011, 2012, 2013, 2014, 2015), "three","other" ))) %>%
+  mutate(lag1 = max-min) 
+  
+
+
+```
+
+```{r}
+allData1
+```
+```{r}
+min(allData1$xBurns)
+max(allData1$xBurns)
+```
+```{r}
+reburnValues = allData1 %>% filter(reburn=="other")
+sort(unique(reburnValues$xBurns))
+```
+
+```{r}
+sort(c(1988, 1994, 2002, 2001, 2006, 1995, 1998, 2008, 2010, 2000, 2012, 2011, 1992,  1993,  1999, 2003,  2004,  2005,  2007,  2009,  2013,  2014,  2015 ))
+```
+
+```{r}
+sort(unique(allData1$lag1))
+```
+
+```{r}
+allDataOnce1 = allDataOne %>% 
+  mutate(albedo = albedo/10000) %>%
+  mutate( burned = ifelse(between(dNBR,-283,-0),"unburned",
+            ifelse(between(dNBR,0,100),"unburned",
+            ifelse(between(dNBR,101,495),"burned", "no")))) 
+
+
+
+```
+
+# Summary stats
+
+```{r}
+allData1 %>% 
+  filter(burned=='burned') %>%
+  filter(reburn!="other") %>%
+  filter(YrSamp %in% c(2014, 2015, 2016, 2017)) %>%
+  filter(lag1>0) %>%
+  group_by(YrSamp) %>%
+  summarize(meanAlbedo= mean(albedo), 
+            meanTemp = mean(ST_L8), 
+            meandNBR = mean(dNBR))
+```
+
+```{r}
+allData1 %>% 
+  filter(burned=='unburned') %>%
+  filter(reburn!="other") %>%
+  filter(YrSamp %in% c(2014, 2015, 2016, 2017)) %>%
+  filter(lag1>0) %>%
+  group_by(YrSamp) %>%
+  summarize(meanAlbedo= mean(albedo), 
+            meanTemp = mean(ST_L8), 
+            meandNBR = mean(dNBR))
+```
+
+```{r}
+allDataOnce1 %>% 
+  filter(burned=='burned') %>%
+  filter(YrSamp %in% c(2014, 2015, 2016, 2017)) %>%
+  group_by(YrSamp) %>%
+  summarize(meanAlbedo= mean(albedo), 
+            menaTemp = mean(ST_L8), 
+            meandNBR = mean(dNBR))
+```
+
+```{r}
+allDataOnce1 %>% 
+  filter(burned=='unburned') %>%
+  filter(YrSamp %in% c(2014, 2015, 2016, 2017)) %>%
+  group_by(YrSamp) %>%
+  summarize(meanAlbedo= mean(albedo), 
+            menaTemp = mean(ST_L8), 
+            meandNBR = mean(dNBR))
+```
+
+# Summarize
+
+```{r}
+allData1 %>% group_by(burned) %>%
+  summarize(ct = n())
+```
+
+```{r}
+allData1 %>% group_by(reburn) %>%
+  summarize(ct = n())
+```
+# Filter out odd values
+```{r}
+allData2 = allData1 %>% 
+  filter(burned!='no') %>%
+  filter(reburn!="other") %>%
+  filter(lag1>0)
+```
+
+```{r}
+allData2 %>% group_by(burned) %>%
+  summarize(ct = n())
+```
+
+```{r}
+allData2 %>% group_by(reburn) %>%
+  summarize(ct = n())
+```
+
+```{r}
+allData2
+```
+
+
+# Explore data
+```{r}
+aspo
+aspr
+```
+
+```{r}
+
+aspr %>% 
+  filter(burned %in% c('burned', 'unburned')) %>%
+ggplot(., aes(x = burned, y=albedo)) +
+  geom_violin() + 
+  
+  geom_boxplot(width=0.1) +
+  stat_summary(fun=mean, geom="point", shape=23, size=2, color="red") +
+  labs(x="", y="albedo")
+  
+
+```
+```{r}
+
+
+ggplot(aspr, aes(x = reburn, y=albedo)) +
+  geom_violin() + 
+  
+  geom_boxplot(width=0.1) +
+  stat_summary(fun=mean, geom="point", shape=23, size=2, color="red") +
+  labs(x="", y="albedo")
+  
+
+```
+
+```{r}
+ggplot(aspr, aes(x = dNBR, y=albedo)) +
+  geom_point() + 
+  labs(x="dnbr", y="albedo")
+```
+
+```{r}
+
+
+ggplot(aspo, aes(x = burn, y=albedo)) +
+  geom_violin() + 
+  
+  geom_boxplot(width=0.1) +
+  stat_summary(fun=mean, geom="point", shape=23, size=2, color="red") +
+  labs(x="", y="albedo")
+  
+
+```
+```{r}
+
+
+ggplot(allData2, aes(x = burned, y=ST_L8)) +
+  geom_violin() + 
+  
+  geom_boxplot(width=0.1) +
+  stat_summary(fun=mean, geom="point", shape=23, size=2, color="red") +
+  labs(x="", y="Temperature")
+  
+
+```
+
+```{r}
+
+
+ggplot(allData2, aes(x = reburn, y=ST_L8)) +
+  geom_violin() + 
+  
+  geom_boxplot(width=0.1) +
+  stat_summary(fun=mean, geom="point", shape=23, size=2, color="red") +
+  labs(x="", y="Temperature")
+  
+
+```
+
+```{r}
+
+
+ggplot(allData2, aes(x = reburn, y=albedo)) +
+  geom_violin() + 
+  
+  geom_boxplot(width=0.1) +
+  stat_summary(fun=mean, geom="point", shape=23, size=2, color="red") +
+  labs(x="", y="Temperature")
+  
+
+```
+
+```{r}
+allData2 %>% 
+  filter(reburn=="twice") %>%
+  filter(burned=="burned") %>%
+ggplot(., aes(x = dNBR, y=albedo)) +
+  geom_point() + 
+  labs(x="dNBR", y="albedo")
+```
+
+```{r}
+allData2 %>% 
+  filter(reburn=="twice") %>%
+  filter(burned=="burned") %>%
+ggplot(., aes(x = dNBR, y=ST_L8)) +
+  geom_point() + 
+  labs(x="dNBR", y="temp")
+```
+
+```{r}
+allData2 %>% 
+  filter(reburn=="twice") %>%
+  filter(burned=="burned") %>%
+ggplot(., aes(x = as.character(lag1), y=albedo)) +
+  geom_boxplot() + 
+  labs(x="lag between 1st and 2nd fire", y="albedo")
+```
