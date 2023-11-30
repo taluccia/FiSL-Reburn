@@ -1,0 +1,86 @@
+---
+title: "CreateAkPlusProvShapefile"
+author: "Anna Talucci"
+date: "2023-11-30"
+output: html_document
+---
+
+# Overview
+
+# Packages
+```{r}
+library(sf)
+library(tidyverse)
+library(magrittr)
+library(pacman)
+```
+
+# Data 
+```{r}
+ak = st_read("../data/boundaries/stateProv/alaska_master_sample/master_sample_AK.shp", "master_sample_AK")
+```
+
+```{r}
+ab = st_read("../data/boundaries/stateProv/alberta_master_sample/master_sample_alberta.shp", "master_sample_alberta")
+```
+
+```{r}
+bc = st_read("../data/boundaries/stateProv/british_columbia_master_sample/master_sample_british_columbia.shp", "master_sample_british_columbia")
+```
+
+```{r}
+mb = st_read("../data/boundaries/stateProv/manitoba_master_sample/master_sample_manitoba.shp", "master_sample_manitoba")
+```
+
+```{r}
+nb = st_read("../data/boundaries/stateProv/new_brunswick_master_sample/master_sample_new_brunswick.shp", "master_sample_new_brunswick")
+```
+
+```{r}
+nf = st_read("../data/boundaries/stateProv/newfoundland_labrador_master_sample/master_sample_newfoundland_labrador.shp", "master_sample_newfoundland_labrador")
+```
+
+```{r}
+nwt = st_read("../data/boundaries/stateProv/northwest_territories_master_sample/master_sample_northwest_territories.shp", "master_sample_northwest_territories")
+```
+
+```{r}
+ns = st_read("../data/boundaries/stateProv/nova_scotia_master_sample/master_sample_nova_scotia.shp", "master_sample_nova_scotia")
+```
+
+```{r}
+on = st_read("../data/boundaries/stateProv/ontario_master_sample/master_sample_ontario.shp", "master_sample_ontario")
+```
+
+```{r}
+pei = st_read("../data/boundaries/stateProv/prince_edward_island_master_sample/master_sample_prince_edward_island.shp", "master_sample_prince_edward_island")
+```
+
+
+```{r}
+qb = st_read("../data/boundaries/stateProv/quebec_master_sample/master_sample_quebec.shp", "master_sample_quebec")
+```
+
+```{r}
+sk = st_read("../data/boundaries/stateProv/saskatchewan_master_sample/master_sample_saskatchewan.shp", "master_sample_saskatchewan")
+```
+
+```{r}
+yk = st_read("../data/boundaries/stateProv/yukon_territory_master_sample/master_sample_yukon_territory.shp", "master_sample_yukon_territory")
+```
+
+# Combine Shapefiles
+
+```{r}
+borealNA = bind_rows(ak, ab, bc, mb, nb, nf, nwt, ns, on, pei, qb, sk, yk)
+```
+
+
+```{r}
+plot(st_geometry(borealNA))
+```
+
+# Save shapefile
+```{r eval=FALSE, include=FALSE}
+st_write(borealNA, "../outputs/boundaries/politcal/borealNA.shp", driver="ESRI Shapefile")
+```
