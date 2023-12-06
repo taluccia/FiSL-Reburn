@@ -23,10 +23,9 @@ dnbrlist2 <- list.files(path="../data/sampledPts/dnbr",pattern='csv$', full.name
 ```
 
 ```{r}
-tempspringlist1 <- list.files(path="../data/skLST/onceBurned/spring",pattern='csv$', full.names = TRUE)
-tempsummerlist1 <- list.files(path="../data/skLST/onceBurned/summer",pattern='csv$', full.names = TRUE)
+
 albspringlist1 <- list.files(path="../data/skAlbedo/onceBurned/spring",pattern='csv$', full.names = TRUE)
-albsummerlist1 <- list.files(path="../data/skAlbedo/onceBurned/summer",pattern='csv$', full.names = TRUE)
+albspringlist2 <- list.files(path="../data/skAlbedo/twiceBurned/spring",pattern='csv$', full.names = TRUE)
 ```
 
 ```{r}
@@ -35,40 +34,34 @@ tempsummerlist2 <- list.files(path="../data/skLST/twiceBurned/summer", pattern='
 ```
 
 ```{r}
-lstSp2013 = read_csv("../data/skLST/twiceBurned/spring/LSTReburnSpringMean2013.csv")
-lstSp2014 = read_csv("../data/skLST/twiceBurned/spring/LSTReburnSpringMean2014.csv")
-lstSp2015 = read_csv("../data/skLST/twiceBurned/spring/LSTReburnSpringMean2015.csv")
-lstSp2016 = read_csv("../data/skLST/twiceBurned/spring/LSTReburnSpringMean2016.csv")
+lst2Sp2013 = read_csv("../data/skLST/LSTReburnSpringMean2013.csv") %>% mutate(YrSamp = 2013) %>% dplyr::select(-.geo)
+lst2Sp2014 = read_csv("../data/skLST/LSTReburnSpringMean2014.csv") %>% mutate(YrSamp = 2014) %>% dplyr::select(-.geo)
+lst2Sp2015 = read_csv("../data/skLST/LSTReburnSpringMean2015.csv") %>% mutate(YrSamp = 2015) %>% dplyr::select(-.geo)
+lst2Sp2016 = read_csv("../data/skLST/LSTReburnSpringMean2016.csv") %>% mutate(YrSamp = 2016) %>% dplyr::select(-.geo)
 ```
 ```{r}
-albspringlist2 <- list.files(path="../data/skAlbedo/twiceBurned/spring",pattern='csv$', full.names = TRUE)
-albsummerlist2 <- list.files(path="../data/skAlbedo/twiceBurned/summer",pattern='csv$', full.names = TRUE)
+lst1Sp2013 = read_csv("../data/skLST/LSTOnceSpringMean2013.csv") %>% mutate(YrSamp = 2013) %>% dplyr::select(-.geo)
+lst1Sp2014 = read_csv("../data/skLST/LSTOnceSpringMean2014.csv") %>% mutate(YrSamp = 2014) %>% dplyr::select(-.geo)
+lst1Sp2015 = read_csv("../data/skLST/LSTOnceSpringMean2015.csv") %>% mutate(YrSamp = 2015) %>% dplyr::select(-.geo)
+lst1Sp2016 = read_csv("../data/skLST/LSTOnceSpringMean2016.csv") %>% mutate(YrSamp = 2016) %>% dplyr::select(-.geo)
 ```
 ### Name items in a list with file name
 names(dnbrlist) <- tools::file_path_sans_ext(basename(dnbrlist))
 ```{r}
-names(tempspringlist1) <- tools::file_path_sans_ext(basename(tempspringlist1))
-names(tempsummerlist1) <- tools::file_path_sans_ext(basename(tempsummerlist1))
 names(albspringlist1) <- tools::file_path_sans_ext(basename(albspringlist1))
-names(albsummerlist1) <- tools::file_path_sans_ext(basename(albsummerlist1))
-```
-
-```{r}
-names(tempspringlist2) <- tools::file_path_sans_ext(basename(tempspringlist2))
-names(tempsummerlist2) <- tools::file_path_sans_ext(basename(tempsummerlist2))
 names(albspringlist2) <- tools::file_path_sans_ext(basename(albspringlist2))
-names(albsummerlist2) <- tools::file_path_sans_ext(basename(albsummerlist2))
-```
-
-```{r}
-tempspringlist2
 ```
 
 ```{r}
 names(dnbrlist1) <- tools::file_path_sans_ext(basename(dnbrlist1))
 names(dnbrlist2) <- tools::file_path_sans_ext(basename(dnbrlist2))
 ```
+# Combine Temp
 
+```{r}
+lst1 = bind_rows(lst1Sp2013, lst1Sp2014, lst1Sp2015, lst1Sp2016)
+lst2 = bind_rows(lst2Sp2013, lst2Sp2014, lst2Sp2015, lst2Sp2016)
+```
 # Select columns and combine data frames
 ## dnbr
 ```{r}
@@ -96,8 +89,8 @@ dnbr2 = orgDnbr2(dnbrlist2)
 ```
 
 ## New data
-
-```{r}
+### Temp Functions for list
+```{r eval=FALSE, include=FALSE}
 orgTempSpring1 <- function(list){ 
   purrr::map(list, read_csv) %>%
   map2(names(.), ~mutate(.x, FXN = .y)) %>%
@@ -109,7 +102,7 @@ orgTempSpring1 <- function(list){
 allTempSpring1 = orgTempSpring1(tempspringlist1)
 ```
 
-```{r}
+```{r eval=FALSE, include=FALSE}
 orgTempSpring2 <- function(list){ 
   purrr::map(list, read_csv) %>%
   map2(names(.), ~mutate(.x, FXN = .y)) %>%
@@ -122,6 +115,7 @@ orgTempSpring2 <- function(list){
 allTempSpring2 = orgTempSpring2(tempspringlist2)
 ```
 
+## Albedo Functions
 ```{r}
 orgAlbSpring1 <- function(list){ 
   purrr::map(list, read_csv) %>%
@@ -155,135 +149,59 @@ allAlbSpring2 = orgAlbSpring2(albspringlist2)
 ```{r}
 allAlbSpring1 
 allAlbSpring2
+lst1
+lst2
+dnbr1
+dnbr2
 ```
 
 ```{r}
-aspo = allAlbSpring1 %>% 
+( data1 = allAlbSpring1 %>% 
   mutate(burn = "once") %>% 
   mutate(season='spring') %>% 
   mutate(albedo = albedo/10000) %>% 
   group_by(YrSamp) %>%
   left_join(., dnbr1, by = ("system:index")) %>%
-  dplyr::select(-FXN, -YrSamp.x) %>%
+  left_join(., lst1, by= ("system:index")) %>%
+  dplyr::select(-FXN, -YrSamp.x, -latitude.x,-longitude.x, -min.x, -YrSamp.y, -latitude.y,-longitude.y, -min.y) %>%
   mutate( burned = ifelse(between(dNBR,-283,-0),"unburned",
             ifelse(between(dNBR,0,100),"unburned",
-            ifelse(between(dNBR,101,495),"burned", "no"))))
+            ifelse(between(dNBR,101,495),"burned", "no")))) 
+)
+  
 ```
 
 ```{r}
-aspr = allAlbSpring2 %>% 
+( data2 = allAlbSpring2 %>% 
   mutate(burn = "twice") %>% 
   mutate(season='spring') %>% 
   mutate(albedo = albedo/10000) %>% 
   mutate(xBurns = sum-max-min) %>%
-  mutate(reburn = ifelse(xBurns ==0, "twice",
-                         ifelse(xBurns %in% c(1988, 1992, 1993, 1994, 1995, 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010, 2011, 2012, 2013, 2014, 2015), "three","other" ))) %>%
+  mutate(reburn = ifelse(xBurns ==0, "Two",
+                         ifelse(xBurns %in% c(1988, 1992, 1993, 1994, 1995, 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010, 2011, 2012, 2013, 2014, 2015), "Three","other" ))) %>%
   mutate(lag1 = max-min) %>% 
   group_by(YrSamp) %>%
   left_join(., dnbr2, by = ("system:index")) %>%
-  dplyr::select(-FXN, -YrSamp.x) %>%
-  mutate( burned = ifelse(between(dNBR,-283,-0),"unburned",
-            ifelse(between(dNBR,0,100),"unburned",
-            ifelse(between(dNBR,101,495),"burned", "no"))))
-```
-
-```{r}
-aspo
-aspr
-```
-```{r}
-asp = rbind(aspo, aspr)
-```
-
-
-
-## dnbr
-```{r}
-dnbr = rbind(dnbr1, dnbr2)
-```
-
-```{r}
-dnbr
-```
-# Combine Dataframes
-```{r}
-albedoDnbr = albedoSpring %>% 
-  group_by(YrSamp) %>%
-  left_join(., dnbr, by = ("system:index")) %>%
-  dplyr::select(-FXN, -YrSamp.x)
-  
-```
-```{r}
-albedoDnbr
-```
-## Once
-
-allDataOne = allAlb1 %>% 
-  group_by(YrSamp) %>%
-  left_join(., allTemp1, by = ("system:index")) %>%
-  left_join(., allDnbr1, by = ("system:index")) %>%
-  dplyr::select(-FXN.x, -FXN.y, -FXN, -YrSamp.x, -YrSamp.y)
-  
-
-# Add Burned unburned class
-
-
-```{r}
-allData
-```
-```{r}
-min(allData$dNBR)
-max(allData$dNBR)
-min(allDataOne$dNBR)
-max(allDataOne$dNBR)
-```
-
-
-
-```{r}
-albedoDnbr1 = albedoDnbr %>% 
-  mutate( burned = ifelse(between(dNBR,-283,-0),"unburned",
-            ifelse(between(dNBR,0,100),"unburned",
-            ifelse(between(dNBR,101,495),"burned", "no")))) %>%
-  mutate(xBurns = sum-max-min) %>%
-  mutate(reburn = ifelse(xBurns ==0, "twice",
-                         ifelse(xBurns %in% c(1988, 1992, 1993, 1994, 1995, 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010, 2011, 2012, 2013, 2014, 2015), "three","other" ))) %>%
-  mutate(lag1 = max-min) 
-  
-
-
-```
-
-```{r}
-allData1
-```
-```{r}
-min(allData1$xBurns)
-max(allData1$xBurns)
-```
-```{r}
-reburnValues = allData1 %>% filter(reburn=="other")
-sort(unique(reburnValues$xBurns))
-```
-
-```{r}
-sort(c(1988, 1994, 2002, 2001, 2006, 1995, 1998, 2008, 2010, 2000, 2012, 2011, 1992,  1993,  1999, 2003,  2004,  2005,  2007,  2009,  2013,  2014,  2015 ))
-```
-
-```{r}
-sort(unique(allData1$lag1))
-```
-
-```{r}
-allDataOnce1 = allDataOne %>% 
-  mutate(albedo = albedo/10000) %>%
+  left_join(., lst2, by= ("system:index")) %>%
+  dplyr::select(-FXN, -YrSamp.x, -count.x, -latitude.x, -longitude.x, -max.x, -median.x, -min.x, -sum.x, -count.y, -latitude.y, -longitude.y, -max.y, -median.y, -min.y, -sum.y) %>%
   mutate( burned = ifelse(between(dNBR,-283,-0),"unburned",
             ifelse(between(dNBR,0,100),"unburned",
             ifelse(between(dNBR,101,495),"burned", "no")))) 
+  )
+```
 
-
+```{r}
+unique(data2$lag1)
 
 ```
+
+
+
+
+
+
+
+
 
 # Summary stats
 
@@ -344,10 +262,15 @@ allData1 %>% group_by(reburn) %>%
 ```
 # Filter out odd values
 ```{r}
-allData2 = allData1 %>% 
+filtData2 = data2 %>% 
   filter(burned!='no') %>%
+  filter(burned!='unburned') %>%
   filter(reburn!="other") %>%
-  filter(lag1>0)
+  filter(lag1>0) %>%
+  mutate( tsf = ifelse(between(lag1,1,10),"Short",
+            ifelse(between(lag1,11,20),"Moderate",
+            ifelse(between(lag1,21,30),"Long", "other")))) %>%
+  filter(tsf!="other")
 ```
 
 ```{r}
@@ -367,54 +290,74 @@ allData2
 
 # Explore data
 ```{r}
-aspo
-aspr
+filtData2
 ```
 
 ```{r}
-
-aspr %>% 
-  filter(burned %in% c('burned', 'unburned')) %>%
-ggplot(., aes(x = burned, y=albedo)) +
+(
+  plot1 = ggplot(filtData2, aes(x = reburn, y=albedo)) +
   geom_violin() + 
   
   geom_boxplot(width=0.1) +
   stat_summary(fun=mean, geom="point", shape=23, size=2, color="red") +
-  labs(x="", y="albedo")
+  labs(x="Number of reburns", y="Spring albedo") +
+    theme_bw()
   
-
+)
 ```
 ```{r}
-
-
-ggplot(aspr, aes(x = reburn, y=albedo)) +
+ggsave("../figures/Plot1.png", plot = plot1, dpi = 600, bg='white')
+```
+```{r}
+(
+  plot2 = ggplot(filtData2, aes(x = reburn, y=ST_L8)) +
   geom_violin() + 
   
   geom_boxplot(width=0.1) +
   stat_summary(fun=mean, geom="point", shape=23, size=2, color="red") +
-  labs(x="", y="albedo")
-  
-
+  labs(x="", y="Mean Spring Temperature degrees C") +
+    theme_bw()
+)
+```
+```{r}
+ggsave("../figures/Plot2.png", plot = plot2, dpi = 600, bg='white')
 ```
 
 ```{r}
-ggplot(aspr, aes(x = dNBR, y=albedo)) +
-  geom_point() + 
-  labs(x="dnbr", y="albedo")
-```
-
-```{r}
-
-
-ggplot(aspo, aes(x = burn, y=albedo)) +
+( 
+  plot3 = ggplot(filtData2, aes(x = tsf, y=albedo)) +
   geom_violin() + 
-  
   geom_boxplot(width=0.1) +
   stat_summary(fun=mean, geom="point", shape=23, size=2, color="red") +
-  labs(x="", y="albedo")
-  
-
+  labs(x="", y="albedo") +
+  theme_bw()
+)
 ```
+
+```{r}
+ggsave("../figures/Plot3.png", plot = plot3, dpi = 600, bg='white')
+```
+```{r}
+( 
+  plot4 = ggplot(filtData2, aes(x = tsf, y=ST_L8)) +
+  geom_violin() + 
+  geom_boxplot(width=0.1) +
+  stat_summary(fun=mean, geom="point", shape=23, size=2, color="red") +
+  labs(x="", y="Mean Spring Temperature degrees C") +
+  theme_bw()
+)
+```
+
+```{r}
+ggsave("../figures/Plot4.png", plot = plot4, dpi = 600, bg='white')
+```
+
+
+
+
+
+
+
 ```{r}
 
 
