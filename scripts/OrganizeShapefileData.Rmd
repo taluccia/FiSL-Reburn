@@ -37,10 +37,40 @@ CanFires2021 = st_read("../data/nbac_2021/nbac_2021_r9_20220624.shp", "nbac_2021
 ```{r}
 prov = st_read("../data/lpr_000b16a_e/lpr_000b16a_e.shp", "lpr_000b16a_e")
 ```
+## Political Bounds
+```{r}
+political = st_read("../data/NorthAmerica/boundaries_p_2021_v3.shp", "boundaries_p_2021_v3")
+```
 
 ## Ecoregions
 ```{r}
 ecor = st_read("../data/ecoLevel2/NA_CEC_Eco_Level2.shp", "NA_CEC_Eco_Level2")
+```
+
+```{r}
+ecor
+unique(ecor$NA_L2NAME)
+```
+# Select 
+##Poloitical Polygons of interest
+```{r}
+political %>% filter(COUNTRY =="CAN")
+```
+```{r}
+( polBor = political %>% filter(NAME_En %in% c("Alberta", "Alaska", "British Columbia", "Yukoon", "Northwest Territories", "Saskatchewan", "Manitoba", "New Brunswick", "Newfoundland and Labrador", "Nova Scotia", "Nunavut", "Ontario", "Prince Edward Island", "Quebec")) )
+```
+
+```{r eval=FALSE, include=FALSE}
+st_write(polBor, "../outputs/StudyAreaPoliticalBounds.shp", driver="ESRI Shapefile")
+```
+
+## Eco regions of interest
+```{r}
+ecostudy = ecor %>% filter(NA_L2NAME %in% c("TAIGA CORDILLERA", "TAIGA PLAIN", "TAIGA SHIELD", "ALASKA BOREAL INTERIOR", "BOREAL PLAIN", "BOREAL CORDILLERA", "SOFTWOOD SHIELD"))
+```
+
+```{r eval=FALSE, include=FALSE}
+st_write(ecostudy, "../outputs/StudyAreaEco.shp", driver="ESRI Shapefile")
 ```
 
 
@@ -63,7 +93,7 @@ munson = AKFires %>% filter(BurnBndLat>50) %>%
 ```{r}
 unique(munson$Incid_Name)
 ```
-```{r }
+```{r eval=FALSE, include=FALSE}
 st_write(munson, "../outputs/MunsonCreek2021.shp", driver="ESRI Shapefile")
 ```
 
@@ -82,6 +112,14 @@ st_write(munson, "../outputs/MunsonCreek2021.shp", driver="ESRI Shapefile")
 ```{r}
 prov = st_transform(prov, projEA)
 firesCA = st_transform(allFires, projEA)
+firesAK = st_transform(AKFires, projEA)
+```
+
+```{r}
+eco4326 = st_transform(ecor, 4326)
+```
+```{r include=FALSE}
+st_write(eco4326, "../outputs/NAEcoregionsII4326.shp", driver="ESRI Shapefile")
 ```
 
 # Join provinces to fires
@@ -101,7 +139,7 @@ firesCA = st_transform(allFires, projEA)
 
 
 # Write to shp
-```{r }
+```{r eval=FALSE, include=FALSE}
 st_write(firev1, "../outputs/CanadaFires1986-2021.shp", driver="ESRI Shapefile")
 ```
 ```{r}
@@ -119,7 +157,7 @@ simpFire4326 = st_transform(mv_simpl, crs=4326)
 
 ```
 
-```{r }
+```{r eval=FALSE, include=FALSE}
 st_write(simpFire4326, "../outputs/CanadaFires4326Simp1986-2021.shp", driver="ESRI Shapefile")
 ```
 # Add Alaska
@@ -131,13 +169,13 @@ Need to reduce some of the vertices of the polygons
 (skFires = firev1 %>% filter(PRENAME=="Saskatchewan"))
 ```
 
-```{r }
+```{r eval=FALSE, include=FALSE}
 st_write(skFires, "../outputs/SKFires1986-2021.shp", driver="ESRI Shapefile")
 ```
-##  Alaska Fires
+#  Alaska Fires
 
 ```{r}
-( akFires = UsaFires %>% filter(BurnBndLat > 50) %>%
+( akFIRES = firesAK %>% filter(BurnBndLat > 50) %>%
   dplyr::mutate(fireYr = lubridate::year(Ig_Date), 
                 month = lubridate::month(Ig_Date), 
                 day = lubridate::day(Ig_Date)) %>%
@@ -147,4 +185,66 @@ st_write(skFires, "../outputs/SKFires1986-2021.shp", driver="ESRI Shapefile")
 
 ```{r eval=FALSE, include=FALSE}
 st_write(akFires, "../outputs/AkFires1986-2021.shp", driver="ESRI Shapefile")
+```
+
+```{r}
+(
+  AKFeco = st_join(akFIRES, prov) %>% 
+    st_join(., ecor, largest = TRUE)
+   )
+```
+## Simplify AK
+```{r eval=FALSE, include=FALSE}
+ak_simpl <- st_simplify(akFires, preserveTopology = TRUE,
+                        dTolerance = 500)
+```
+Error in wk_handle.wk_wkb(wkb, s2_geography_writer(oriented = oriented, :
+Loop 0 is not valid: Edge 12580 has duplicate vertex with edge 12653
+
+
+## Transform AK
+```{r}
+simpAK4326 = st_transform(AKFeco, crs=4326)
+
+```
+
+# Combine AK and Canada perimeters
+```{r}
+names(simpFire4326)
+```
+
+```{r}
+( CA = simpFire4326 %>% 
+  dplyr::select("YEAR", "NFIREID", "PRUID", "PRENAME", "NA_L2NAME", "geometry") %>%
+  rename(Year = YEAR, FireID = NFIREID) %>%
+    mutate(FireID = as.character(FireID))
+)
+```
+```{r}
+str(CA)
+```
+
+```{r}
+names(simpAK4326)
+```
+
+```{r}
+( AK = simpAK4326 %>% 
+  dplyr::select("fireYr", "Event_ID", "PRUID", "PRENAME", "NA_L2NAME", "geometry") %>%
+  rename(Year = fireYr, FireID = Event_ID) 
+)
+```
+```{r eval=FALSE, include=FALSE}
+st_write(AK, "../outputs/AK4326Fires1986-2021.shp", driver="ESRI Shapefile")
+```
+```{r}
+str(AK)
+```
+
+```{r}
+( borealFires = bind_rows(CA, AK) )
+```
+
+```{r eval=FALSE, include=FALSE}
+st_write(borealFires, "../outputs/Boreal4326Fires1986-2021.shp", driver="ESRI Shapefile")
 ```
