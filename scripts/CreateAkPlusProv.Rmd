@@ -82,5 +82,5 @@ plot(st_geometry(borealNA))
 
 # Save shapefile
 ```{r eval=FALSE, include=FALSE}
-st_write(borealNA, "../outputs/boundaries/politcal/borealNA.shp", driver="ESRI Shapefile")
+st_write(borealNA, "../outputs/boundaries/political/borealNA.shp", driver="ESRI Shapefile")
 ```
