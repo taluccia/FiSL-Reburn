@@ -1,0 +1,55 @@
+---
+title: "Sample Points Clean For EE"
+author: "Anna Talucci"
+date: "2023-12-06"
+output: html_document
+---
+
+# Overview
+
+# Packages
+```{r}
+library(tidyverse)
+library(sf)
+```
+
+# Data
+```{r}
+eco = st_read("../data/samplePoints/raw/skShp/skStratifiedEco1000v2.shp", "skStratifiedEco1000v2") 
+```
+
+
+
+# Organize Eco points
+```{r}
+( ecoDf = eco%>% 
+  rename(lat = latitude, lon = longitude) %>%
+  mutate(rowId=row_number()) %>%
+    rename(count = countCA)
+)
+```
+
+# Save as shapefile
+```{r eval=FALSE, include=FALSE}
+st_write(ecoDf, "../outputs/samplePoints/skStratifiedEco1000v2.shp", driver="ESRI Shapefile")
+```
+
+
+# Data
+```{r}
+ecoWater = st_read("../data/samplePoints/raw/skShp/skStratifiedEco1000NoH2Ov2.shp", "skStratifiedEco1000NoH2Ov2") 
+```
+
+
+
+# Organize Eco points
+```{r}
+( ecoDfWater = ecoWater%>% 
+  filter(water==1)
+)
+```
+
+# Save as shapefile
+```{r eval=FALSE, include=FALSE}
+st_write(ecoDfWater, "../outputs/samplePoints/skStratifiedEco1000NoH2Ov2.shp", driver="ESRI Shapefile")
+```

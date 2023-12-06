@@ -1,0 +1,31 @@
+---
+title: "Remove Water points"
+author: "Anna Talucci"
+date: "2023-12-05"
+output: html_document
+---
+
+# Overview
+
+# Packages
+```{r}
+library(tidyverse)
+library(sf)
+```
+
+# Data
+```{r}
+eco = st_read("../data/samplePoints/raw/skShp/skStratifiedEco500NoH2O.shp", "skStratifiedEco500NoH2O") 
+```
+
+
+# Organize Eco points
+```{r}
+( ecoDf = eco %>% filter(water !=2)
+)
+```
+
+# Save as shapefile
+```{r eval=FALSE, include=FALSE}
+st_write(ecoDf, "../outputs/samplePoints/skStratifiedEco500NoH2O.shp", driver="ESRI Shapefile")
+```

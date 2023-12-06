@@ -1,0 +1,185 @@
+---
+title: "Summary Stats & Figures"
+author: "Anna Talucci"
+date: "2023-12-05"
+output: html_document
+---
+
+# Overview
+
+
+# Packages
+```{r}
+library(tidyverse)
+library(sf)
+```
+
+# Data
+```{r}
+skdf1k = read_csv("../data/samplePoints/cleanedSamplePoints/skStratifiedSample1k20180213v2.cvs")
+```
+
+
+```{r}
+skdf = read_csv("../data/samplePoints/cleanedSamplePoints/skStratifiedSample.cvs")
+```
+('../outputs/cleanedSamplePoints/skStratifiedSample.cvs', row.names=F)
+# check
+```{r}
+skdf = skdf %>% mutate(TimeSinceFire= ordered(TimeSinceFire, levels = c("0", "1", "2-5", "6-10", "11-20", "21-31", "Other")),
+         burned = ordered(burned, levels = c("Unburned", "One", "Two", "Three", "other")))
+```
+
+```{r}
+skdf1k = skdf1k %>% mutate(TimeSinceFire= ordered(TimeSinceFire, levels = c("0", "1", "2-5", "6-10", "11-20", "21-31", "Other")),
+         burned = ordered(burned, levels = c("Unburned", "One", "Two", "Three", "other")))
+```
+
+```{r}
+unique(skdf1k$ECO_NAME)
+skdf1k
+```
+# Summary
+
+```{r}
+skdf %>% 
+  dplyr::select(ST_L8, albedo, TimeSinceFire, burned) %>%
+  group_by(burned, TimeSinceFire) %>%
+  summarise(meanAlb = mean(albedo),
+            sdAlb = sd(albedo),
+            minAlb = min(albedo),
+            maxAlb = max(albedo),
+            meanTemp = mean(ST_L8),
+            sdTemp = sd(ST_L8),
+            minTemp = min(ST_L8),
+            maxTemp = max(ST_L8)) %>%
+  write.csv('../outputs/Summaries/skSummaryStats.csv', row.names = F)
+
+```
+
+```{r}
+skdf1k %>% 
+  dplyr::select(albedo, TimeSinceFire, burned) %>%
+  group_by(burned, TimeSinceFire) %>%
+  summarise(meanAlb = mean(albedo),
+            sdAlb = sd(albedo),
+            minAlb = min(albedo),
+            maxAlb = max(albedo)) %>%
+  write.csv('../outputs/Summaries/skSummaryStatsAlbedo1kv2.csv', row.names = F)
+
+```
+Summary Table Fancy
+```{r eval=FALSE, include=FALSE}
+(
+  tbl <- 
+  df1 %>%
+  select(albedo, ST_L8, burned, TimeSinceFire) %>%
+  dplyr::mutate(
+    TimeSinceFire = factor(TimeSinceFire, levels = c('one', '2-5', '6-10', '10-19', '20-31')),
+    burned = factor(burned, labels = c("Unburned", "One", "Two", "Three"))
+  ) %>%
+  tbl_strata(
+    strata = TimeSinceFire,
+    ~.x %>%
+      tbl_summary(
+        by = burned,
+        type = where(is.numeric) ~ "continuous",
+        
+      ) %>%
+      modify_header(all_stat_cols() ~ "**{level}**") 
+  )
+)
+```
+
+
+
+
+# Subset
+```{r}
+unique(skdf1k$TimeSinceFire)
+```
+
+```{r}
+(
+  skdf1krecent = skdf1k %>% filter(TimeSinceFire %in% c("0", "1", "2-5")) 
+    )
+```
+
+```{r}
+(
+  skdf1kold = skdf1k %>% filter(TimeSinceFire %in% c("0", "6-10", "11-20", "21-31")) 
+    )
+```
+
+```{r}
+unique(skdf1krecent$ECO_NAME)
+```
+
+```{r}
+skdf1k %>% filter(ECO_NAME=="Northern Canadian Shield taiga" )
+```
+# Figures
+
+```{r}
+( skViolinAlb = ggplot(skdf1krecent, aes(x = burned, y=albedo)) +
+  #geom_violin() + 
+  
+  geom_boxplot(aes(color=TimeSinceFire), width=0.7,position = position_dodge(width=0.9)) +
+  facet_wrap(~ECO_NAME) +
+    scale_color_manual(values=c('#1b9e77','#d95f02','#7570b3')) +
+  #stat_summary(fun=mean, geom="point", shape=23, size=2, color="red") +
+  labs(x="Times burned", y="Spring albedo") +
+    theme_bw()
+  
+)
+```
+
+```{r}
+ggsave("../figures/skBoxAlbedo1kRecentv2.png", plot = skViolinAlb, width = 8, height =5, units = c("in"), dpi=600, bg = "white" )
+```
+
+
+```{r}
+( skViolinAlbOld = ggplot(skdf1kold, aes(x = burned, y=albedo)) +
+  #geom_violin() + 
+  
+  geom_boxplot(aes(color=TimeSinceFire), width=0.7,position = position_dodge(width=0.9)) +
+  facet_wrap(~ECO_NAME) +
+    scale_color_manual(values=c('#a6cee3','#1f78b4','#b2df8a','#33a02c')) +
+  #stat_summary(fun=mean, geom="point", shape=23, size=2, color="red") +
+  labs(x="Times burned", y="Spring albedo") +
+    theme_bw()
+  
+)
+```
+```{r}
+ggsave("../figures/skBoxAlbedo1kOldv2.png", plot = skViolinAlbOld, width = 8, height =5, units = c("in"), dpi=600, bg = "white" )
+```
+
+```{r}
+(skViolinLST = ggplot(skdf, aes(x = burned, y=ST_L8, color=TimeSinceFire)) +
+  geom_violin() + 
+  
+  geom_boxplot(width=0.1) +
+  stat_summary(fun=mean, geom="point", shape=23, size=2, color="red") +
+  facet_wrap(~TimeSinceFire) +
+  labs(x="Times burned", y="Spring land surface tempature") +
+    theme_bw()
+  
+)
+```
+```{r}
+ggsave("../figures/skViolinLST.png", plot = skViolinLST, width = 6, height =5, units = c("in"),dpi=600, bg = "white" )
+```
+
+ 
+
+```{r}
+( skScatterAlb = ggplot(skdf500recent, aes(x = TSF, y=albedo, color=TimeSinceFire, shape=burned)) +
+  geom_point() + 
+  labs(x="Time since fire", y="Spring albedo") +
+    theme_bw()
+)
+```
+
+

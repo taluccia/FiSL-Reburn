@@ -1,0 +1,52 @@
+---
+title: "SummariesReburnEcoRegions"
+author: "Anna Talucci"
+date: "2023-11-30"
+output: html_document
+---
+
+# Overview
+Study area map
+# Packages
+```{r}
+library(sf)
+library(tidyverse)
+
+```
+
+
+# Data
+```{r}
+ak = read_csv('../data/summaryReburnEco/resolveReburnAreaAk.csv')
+ca = read_csv('../data/summaryReburnEco/resolveReburnAreaCa.csv')
+```
+
+```{r}
+centroids =st_read("../data/boundaries/ecozones/resolve/ResolveBorealEcozonesCentroids.shp",  "ResolveBorealEcozonesCentroids")
+```
+
+# Organize Shapefiles
+```{r}
+ak = ak %>% dplyr::select(ECO_NAME, sum) %>% group_by(ECO_NAME) %>%  summarise(AKaream2 = sum(sum))
+```
+```{r}
+summary = ca %>% dplyr::select(ECO_NAME, sum) %>% group_by(ECO_NAME) %>%  summarise(CAaream2 = sum(sum)) %>% right_join(ak, by='ECO_NAME') %>% mutate(rAream2 = (CAaream2 +AKaream2)) %>% mutate(rAreakm2 = round(rAream2*0.000001, 0)) %>% mutate(rAreaha = round(rAream2*0.0001, 0))
+```
+
+```{r}
+summary
+```
+# Join Summary to Shapefile
+
+```{r}
+reburnSum = centroids %>% right_join(summary, by='ECO_NAME')
+```
+
+```{r}
+reburnSum
+```
+
+# Save as shapefile
+```{r eval=FALSE, include=FALSE}
+st_write(reburnSum, "../outputs/points/reburnSumResloveCentroids.shp", driver="ESRI Shapefile")
+```

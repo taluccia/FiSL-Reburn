@@ -1,0 +1,530 @@
+---
+title: "Sampled Points Summary"
+author: "Anna Talucci"
+date: "2023-11-30"
+output: html_document
+---
+
+# Overview
+
+# Packages
+```{r}
+library(tidyverse)
+library(sf)
+```
+
+# Data
+
+```{r}
+all = read_csv("../data/samplePoints/sk/skdNBRLstAlb.csv") %>% dplyr::select(-.geo)
+```
+
+```{r eval=FALSE, include=FALSE}
+all
+```
+
+
+```{r}
+sklstalb = read_csv("../data/samplePoints/sk/skLstAlb.csv") %>% dplyr::select(-.geo)
+skreburn = read_csv("../data/samplePoints/sk/skreburn.csv") %>% dplyr::select(-.geo)
+```
+
+```{r}
+sklst500 = read_csv("../data/samplePoints/raw/sk/skLst500.csv") %>% dplyr::select(-.geo)
+skreburn500 = read_csv("../data/samplePoints/raw/sk/skReburn500.csv") %>% dplyr::select(-.geo)
+skalb500 = read_csv("../data/samplePoints/raw/sk/skAlb500.csv") %>% dplyr::select(-.geo)
+```
+
+```{r}
+sklst1k = read_csv("../data/samplePoints/raw/sk/skLst1000v2.csv") %>% dplyr::select(-.geo)
+skreburn1k = read_csv("../data/samplePoints/raw/sk/skReburn1000v2.csv") %>% dplyr::select(-.geo)
+skalb1k = read_csv("../data/samplePoints/raw/sk/skAlb1000v2.csv") %>% dplyr::select(-.geo)
+```
+
+
+
+
+
+# Organize Sample points
+cols = new_sp_m014:newrel_f65,
+## Split by Canada and Alaksa an then recombine
+```{r eval=FALSE, include=FALSE}
+( can = all %>% 
+  rename(ID='system:index') %>%
+  dplyr::select(ID, ST_L8, albedo, countCA, dnbr1986:dnbr2017, dnbrCt, maxCA, medianCA, minCA, sumCA) %>%
+    rename(countYr = countCA, maxYr= maxCA, medianYr = medianCA, minYr = minCA, sumYr = sumCA)
+  
+)
+
+```
+
+```{r eval=FALSE, include=FALSE}
+( ak = all %>% 
+  rename(ID='system:index') %>%
+  dplyr::select(ID, ST_L8, albedo, countAK, dnbr1986:dnbr2017, dnbrCt, maxAK, medianAK, minAK, sumAK) %>%
+    rename(countYr = countAK, maxYr= maxAK, medianYr = medianAK, minYr = minAK, sumYr = sumAK)
+  
+)
+
+```
+
+```{r eval=FALSE, include=FALSE}
+
+( df = bind_rows(can, ak) %>%
+    dplyr::select(ID:countYr, dnbrCt:sumYr, dnbr1986:dnbr2017) %>%
+  pivot_longer(cols = dnbr1986:dnbr2017, names_to = "dnbrYr", values_to = "dnbrValue", values_drop_na = TRUE) %>%
+  mutate(new = readr::parse_number(as.character(dnbrYr))) %>%
+  dplyr::select(-dnbrYr) %>%
+  rename(dnbrYr=new) 
+    
+)
+
+```
+
+mutate(burned = ifelse(countYr==0, "Unburned",
+                                     ifelse(countYr==1, "One",
+                                            ifelse(countYr==2, "Two",
+                                                   ifelse(countYr==3, "Three", "other"))))
+Colapse dnbr values and years
+
+
+
+```{r eval=FALSE, include=FALSE}
+(
+dnbrValues = df %>% 
+  group_by(ID) %>% 
+  summarise(dnbrValue = paste0(unique(dnbrValue), collapse = ",")) 
+)
+```
+
+```{r eval=FALSE, include=FALSE}
+( dnbrYrs = df %>% 
+  group_by(ID) %>% 
+  summarise(dnbrYr = paste0(unique(dnbrYr), collapse = ",")) %>%
+    right_join(., dnbrValues, by='ID')
+)
+```
+```{r eval=FALSE, include=FALSE}
+(
+  df1 = df %>% 
+    pivot_wider(names_from = dnbrYr,names_glue = "yr_{dnbrYr}",values_from = dnbrValue) %>%
+    dplyr::select(ID:sumYr) %>%
+    right_join(., dnbrYrs, by = 'ID') %>%
+    mutate(burned = ifelse(countYr==0, "Unburned",
+                                     ifelse(countYr==1, "One",
+                                            ifelse(countYr==2, "Two",
+                                                   ifelse(countYr==3, "Three", "other"))))) %>%
+    mutate(TSF = 2018-maxYr) %>%
+    filter(countYr<=3) %>%
+    mutate(TimeSinceFire = ifelse(countYr==0, "unburned",
+                                     ifelse(TSF==1, "One",
+                                            ifelse(TSF %in% c(2, 3, 4, 5), "2-5",
+                                                   ifelse(TSF %in% c(6, 7, 8, 9, 10), "6-10", 
+                                                          ifelse(TSF %in% c(10:19), "10-19", 
+                                                                 ifelse(TSF %in% c(20:31), "20-31", "other")))))))  %>% 
+    filter(maxYr <=2017 | sumYr==0) %>%
+    drop_na("albedo", "ST_L8")  #%>% 
+  #mutate_at("TimeSinceFire", ~replace_na(., "Unburned")) %>%
+  #dplyr::mutate(
+    #TimeSinceFire = factor(TimeSinceFire, levels = c('Unburned', 'One', '2-5', '6-10', '10-19', '20-31')),
+    #burned = factor(burned, labels = c("Unburned", "One", "Two", "Three"))) 
+    
+)
+```
+```{r eval=FALSE, include=FALSE}
+unique(sort(df1$TSF))
+```
+
+```{r eval=FALSE, include=FALSE}
+na_rows <- df1[!complete.cases(df1), ]
+na_rows
+```
+
+
+# Organize Sample Region Points
+
+```{r}
+sklstalb
+skreburn
+```
+
+```{r}
+(
+skSamples = sklstalb %>% 
+  full_join(., skreburn, by=c("system:index", "ECO_NAME", "lat", "lon", "rowId")) %>%
+  rename(ID = "system:index", countYr = count.x, maxYr=maxCA, medianYr=medianCA, minYr=minCA, sumYr=sumCA) %>%
+  dplyr::select(ID:rowId, maxYr:sumYr) %>%
+  mutate(burned = ifelse(countYr==0, "Unburned",
+                  ifelse(countYr==1, "One",
+                  ifelse(countYr==2, "Two",
+                  ifelse(countYr==3, "Three", "other"))))) %>%
+  mutate(TSF = 2018-maxYr) %>%
+    filter(countYr<=3) %>%
+    mutate(TimeSinceFire = ifelse(countYr==0, "0",
+                                     ifelse(TSF==1, "1",
+                                            ifelse(TSF %in% c(2, 3, 4, 5), "2-5",
+                                                   ifelse(TSF %in% c(6, 7, 8, 9, 10), "6-10", 
+                                                          ifelse(TSF %in% c(10:19), "10-19", 
+                                                                 ifelse(TSF %in% c(20:31), "20-31", "Other")))))))  %>% 
+  mutate(TimeSinceFire= ordered(TimeSinceFire, levels = c("0", "1", "2-5", "6-10", "10-19", "20-31", "Other")),
+         burned = ordered(burned, levels = c("Unburned", "One", "Two", "Three", "other"))) %>%
+  mutate_at(c('maxYr', 'medianYr', 'minYr', 'sumYr', 'TSF'), ~replace_na(.,0)) %>%
+
+  drop_na("ST_L8") %>% 
+  drop_na("albedo") %>%
+  filter(maxYr <=2017) # takes n from 590 to 510
+)
+
+```
+ 
+```{r}
+write.csv(skSamples, '../outputs/cleanedSamplePoints/skStratifiedSample.cvs', row.names=F)
+```
+
+# Organize Sample Region Points 500
+
+```{r}
+skalb500
+skreburn500
+sklst500
+```
+
+```{r}
+(
+skSamples500 = skalb500 %>% 
+  full_join(., skreburn500, by=c("system:index", "ECO_NAME", "lat", "lon", "rowId")) %>%
+  full_join(., sklst500, by=c("system:index", "ECO_NAME", "lat", "lon", "rowId")) %>%
+  rename(ID = "system:index", countYr = count.x, maxYr=maxCA, medianYr=medianCA, minYr=minCA, sumYr=sumCA) %>%
+  
+  mutate_at(c('maxYr', 'medianYr', 'minYr', 'sumYr'), ~replace_na(.,0)) %>%
+  dplyr::select(ID:rowId, maxYr:sumYr, ST_L8, water) %>%
+  mutate(burned = ifelse(countYr==0, "Unburned",
+                  ifelse(countYr==1, "One",
+                  ifelse(countYr==2, "Two",
+                  ifelse(countYr==3, "Three", "other"))))) %>%
+  mutate(TSF2018 = 2018-maxYr,
+         TSF2017 = 2017-maxYr,
+         TSF2016 = 2016-maxYr,
+         TSF2015 = 2015-maxYr,
+         TSF2014 = 2014-maxYr,
+         TSF2013 = 2013-maxYr) %>%
+    mutate(TimeSinceFire2018 = ifelse(countYr==0, "0",
+                               ifelse(TSF2018==1, "1",
+                               ifelse(TSF2018 %in% c(2, 3, 4, 5), "2-5",
+                              ifelse(TSF2018 %in% c(6, 7, 8, 9, 10), "6-10", 
+                              ifelse(TSF2018 %in% c(10:19), "10-19", 
+                               ifelse(TSF2018 %in% c(20:31), "20-31", "Other")))))))  %>% 
+  mutate(TimeSinceFire2017 = ifelse(countYr==0, "0",
+                               ifelse(TSF2017==1, "1",
+                               ifelse(TSF2017 %in% c(2, 3, 4, 5), "2-5",
+                              ifelse(TSF2017 %in% c(6, 7, 8, 9, 10), "6-10", 
+                              ifelse(TSF2017 %in% c(10:19), "10-19", 
+                               ifelse(TSF2017 %in% c(20:31), "20-31", "Other")))))))  %>% 
+  mutate(TimeSinceFire2016 = ifelse(countYr==0, "0",
+                               ifelse(TSF2016==1, "1",
+                               ifelse(TSF2016 %in% c(2, 3, 4, 5), "2-5",
+                              ifelse(TSF2016 %in% c(6, 7, 8, 9, 10), "6-10", 
+                              ifelse(TSF2016 %in% c(10:19), "10-19", 
+                               ifelse(TSF2016 %in% c(20:31), "20-31", "Other")))))))  %>% 
+  mutate(TimeSinceFire2015 = ifelse(countYr==0, "0",
+                               ifelse(TSF2015==1, "1",
+                               ifelse(TSF2015 %in% c(2, 3, 4, 5), "2-5",
+                              ifelse(TSF2015 %in% c(6, 7, 8, 9, 10), "6-10", 
+                              ifelse(TSF2015 %in% c(10:19), "10-19", 
+                               ifelse(TSF2015 %in% c(20:31), "20-31", "Other")))))))  %>% 
+  mutate(TimeSinceFire2014 = ifelse(countYr==0, "0",
+                               ifelse(TSF2014==1, "1",
+                               ifelse(TSF2014 %in% c(2, 3, 4, 5), "2-5",
+                              ifelse(TSF2014 %in% c(6, 7, 8, 9, 10), "6-10", 
+                              ifelse(TSF2014 %in% c(10:19), "10-19", 
+                               ifelse(TSF2014 %in% c(20:31), "20-31", "Other")))))))  %>% 
+  mutate(TimeSinceFire2013 = ifelse(countYr==0, "0",
+                               ifelse(TSF2013==1, "1",
+                               ifelse(TSF2013 %in% c(2, 3, 4, 5), "2-5",
+                              ifelse(TSF2013 %in% c(6, 7, 8, 9, 10), "6-10", 
+                              ifelse(TSF2013 %in% c(10:19), "10-19", 
+                               ifelse(TSF2013 %in% c(20:31), "20-31", "Other")))))))  %>% 
+  mutate(TimeSinceFire2018= ordered(TimeSinceFire2018, levels = c("0", "1", "2-5", "6-10", "10-19", "20-31", "Other")),
+         TimeSinceFire2017= ordered(TimeSinceFire2017, levels = c("0", "1", "2-5", "6-10", "10-19", "20-31", "Other")),
+         TimeSinceFire2016= ordered(TimeSinceFire2016, levels = c("0", "1", "2-5", "6-10", "10-19", "20-31", "Other")),
+         TimeSinceFire2015= ordered(TimeSinceFire2015, levels = c("0", "1", "2-5", "6-10", "10-19", "20-31", "Other")),
+         TimeSinceFire2014= ordered(TimeSinceFire2014, levels = c("0", "1", "2-5", "6-10", "10-19", "20-31", "Other")),
+         TimeSinceFire2013= ordered(TimeSinceFire2013, levels = c("0", "1", "2-5", "6-10", "10-19", "20-31", "Other")),
+         burned = ordered(burned, levels = c("Unburned", "One", "Two", "Three", "other"))) %>%
+  filter(water==1)
+
+)
+
+```
+ 
+```{r}
+skSamples500 %>% filter(water !=1)
+```
+
+
+```{r}
+write.csv(skSamples500, '../outputs/cleanedSamplePoints/skStratifiedSample500.cvs', row.names=F)
+```
+
+## Reorganize 500
+```{r}
+( 
+  samp2018 = 
+    skSamples500 %>% 
+    dplyr::select(ID, ECO_NAME, alb2018, countYr:sumYr, burned, TSF2018, TimeSinceFire2018) %>%
+    rename(albedo=alb2018, TSF = TSF2018, TimeSinceFire=TimeSinceFire2018) %>%
+    mutate(albedoYr=2018,
+           tsfYr=2018)
+)
+```
+
+```{r}
+( 
+  samp2017 = 
+    skSamples500 %>% 
+    dplyr::select(ID, ECO_NAME, alb2017, countYr:sumYr, burned, TSF2017, TimeSinceFire2017) %>%
+    rename(albedo=alb2017, TSF = TSF2017, TimeSinceFire=TimeSinceFire2017) %>%
+    mutate(albedoYr=2017,
+           tsfYr=2017)
+)
+```
+
+```{r}
+( 
+  samp2016 = 
+    skSamples500 %>% 
+    dplyr::select(ID, ECO_NAME, alb2016, countYr:sumYr, burned, TSF2016, TimeSinceFire2016) %>%
+    rename(albedo=alb2016, TSF = TSF2016, TimeSinceFire=TimeSinceFire2016) %>%
+    mutate(albedoYr=2016,
+           tsfYr=2016)
+)
+```
+
+```{r}
+( 
+  samp2015 = 
+    skSamples500 %>% 
+    dplyr::select(ID, ECO_NAME, alb2015, countYr:sumYr, burned, TSF2015, TimeSinceFire2015) %>%
+    rename(albedo=alb2015, TSF = TSF2015, TimeSinceFire=TimeSinceFire2015) %>%
+    mutate(albedoYr=2015,
+           tsfYr=2015)
+)
+```
+
+```{r}
+( 
+  samp2014 = 
+    skSamples500 %>% 
+    dplyr::select(ID, ECO_NAME, alb2014, countYr:sumYr, burned, TSF2014, TimeSinceFire2014) %>%
+    rename(albedo=alb2014, TSF = TSF2014, TimeSinceFire=TimeSinceFire2014) %>%
+    mutate(albedoYr=2014,
+           tsfYr=2014)
+)
+```
+
+```{r}
+( 
+  samp2013 = 
+    skSamples500 %>% 
+    dplyr::select(ID, ECO_NAME, alb2013, countYr:sumYr, burned, TSF2013, TimeSinceFire2013) %>%
+    rename(albedo=alb2013, TSF = TSF2013, TimeSinceFire=TimeSinceFire2013) %>%
+    mutate(albedoYr=2013,
+           tsfYr=2013)
+)
+```
+
+```{r}
+
+(
+  skdata =
+    bind_rows(samp2018, samp2017, samp2016, samp2015, samp2014, samp2013)
+)
+```
+
+
+```{r}
+write.csv(skdata, '../outputs/cleanedSamplePoints/skStratifiedSample50020180213.cvs', row.names=F)
+```
+
+
+# Organize Sample Region Points 1k v2
+
+```{r}
+skalb1k
+skreburn1k
+sklst1k
+```
+
+```{r}
+(
+skSamples1k = skalb1k %>% 
+  full_join(., skreburn1k, by=c("system:index", "ECO_NAME", "lat", "lon", "rowId")) %>%
+  full_join(., sklst1k, by=c("system:index", "ECO_NAME", "lat", "lon", "rowId")) %>%
+  rename(ID = "system:index", countYr = count.x, maxYr=maxCA, medianYr=medianCA, minYr=minCA, sumYr=sumCA) %>%
+  
+  mutate_at(c('maxYr', 'medianYr', 'minYr', 'sumYr'), ~replace_na(.,0)) %>%
+  dplyr::select(ID:rowId, maxYr:sumYr, ST_L8, water) %>%
+  mutate(burned = ifelse(countYr==0, "Unburned",
+                  ifelse(countYr==1, "One",
+                  ifelse(countYr==2, "Two",
+                  ifelse(countYr==3, "Three", "other"))))) %>%
+  mutate(TSF2018 = 2018-maxYr,
+         TSF2017 = 2017-maxYr,
+         TSF2016 = 2016-maxYr,
+         TSF2015 = 2015-maxYr,
+         TSF2014 = 2014-maxYr,
+         TSF2013 = 2013-maxYr) %>%
+    mutate(TimeSinceFire2018 = ifelse(countYr==0, "0",
+                               ifelse(TSF2018==1, "1",
+                               ifelse(TSF2018 %in% c(2, 3, 4, 5), "2-5",
+                              ifelse(TSF2018 %in% c(6, 7, 8, 9, 10), "6-10", 
+                              ifelse(TSF2018 %in% c(10:19), "11-20", 
+                               ifelse(TSF2018 %in% c(20:31), "21-31", "Other")))))))  %>% 
+  mutate(TimeSinceFire2017 = ifelse(countYr==0, "0",
+                               ifelse(TSF2017==1, "1",
+                               ifelse(TSF2017 %in% c(2, 3, 4, 5), "2-5",
+                              ifelse(TSF2017 %in% c(6, 7, 8, 9, 10), "6-10", 
+                              ifelse(TSF2017 %in% c(10:19), "11-20", 
+                               ifelse(TSF2017 %in% c(20:31), "21-31", "Other")))))))  %>% 
+  mutate(TimeSinceFire2016 = ifelse(countYr==0, "0",
+                               ifelse(TSF2016==1, "1",
+                               ifelse(TSF2016 %in% c(2, 3, 4, 5), "2-5",
+                              ifelse(TSF2016 %in% c(6, 7, 8, 9, 10), "6-10", 
+                              ifelse(TSF2016 %in% c(10:19), "11-20", 
+                               ifelse(TSF2016 %in% c(20:31), "21-31", "Other")))))))  %>% 
+  mutate(TimeSinceFire2015 = ifelse(countYr==0, "0",
+                               ifelse(TSF2015==1, "1",
+                               ifelse(TSF2015 %in% c(2, 3, 4, 5), "2-5",
+                              ifelse(TSF2015 %in% c(6, 7, 8, 9, 10), "6-10", 
+                              ifelse(TSF2015 %in% c(10:19), "11-20", 
+                               ifelse(TSF2015 %in% c(20:31), "21-31", "Other")))))))  %>% 
+  mutate(TimeSinceFire2014 = ifelse(countYr==0, "0",
+                               ifelse(TSF2014==1, "1",
+                               ifelse(TSF2014 %in% c(2, 3, 4, 5), "2-5",
+                              ifelse(TSF2014 %in% c(6, 7, 8, 9, 10), "6-10", 
+                              ifelse(TSF2014 %in% c(10:19), "11-20", 
+                               ifelse(TSF2014 %in% c(20:31), "21-31", "Other")))))))  %>% 
+  mutate(TimeSinceFire2013 = ifelse(countYr==0, "0",
+                               ifelse(TSF2013==1, "1",
+                               ifelse(TSF2013 %in% c(2, 3, 4, 5), "2-5",
+                              ifelse(TSF2013 %in% c(6, 7, 8, 9, 10), "6-10", 
+                              ifelse(TSF2013 %in% c(10:19), "11-20", 
+                               ifelse(TSF2013 %in% c(20:31), "21-31", "Other")))))))  %>% 
+  mutate(TimeSinceFire2018= ordered(TimeSinceFire2018, levels = c("0", "1", "2-5", "6-10", "11-20", "21-31", "Other")),
+         TimeSinceFire2017= ordered(TimeSinceFire2017, levels = c("0", "1", "2-5", "6-10", "11-20", "21-31", "Other")),
+         TimeSinceFire2016= ordered(TimeSinceFire2016, levels = c("0", "1", "2-5", "6-10", "11-20", "21-31", "Other")),
+         TimeSinceFire2015= ordered(TimeSinceFire2015, levels = c("0", "1", "2-5", "6-10", "11-20", "21-31", "Other")),
+         TimeSinceFire2014= ordered(TimeSinceFire2014, levels = c("0", "1", "2-5", "6-10", "11-20", "21-31", "Other")),
+         TimeSinceFire2013= ordered(TimeSinceFire2013, levels = c("0", "1", "2-5", "6-10", "11-20", "21-31", "Other")),
+         burned = ordered(burned, levels = c("Unburned", "One", "Two", "Three", "other"))) %>%
+  filter(water==1) %>%
+  filter(lat >=55)
+
+)
+
+```
+ 
+```{r}
+skSamples1k %>% filter(water !=1)
+skSamples1k %>% filter(lat >=55)
+
+unique(skSamples1k$ECO_NAME)
+```
+
+
+```{r}
+write.csv(skSamples1k, '../outputs/cleanedSamplePoints/skStratifiedSample1kv2.cvs', row.names=F)
+```
+
+## Reorganize 
+```{r}
+( 
+  samp2018k = 
+    skSamples1k %>% 
+    dplyr::select(ID, ECO_NAME, alb2018, countYr:sumYr, burned, TSF2018, TimeSinceFire2018) %>%
+    rename(albedo=alb2018, TSF = TSF2018, TimeSinceFire=TimeSinceFire2018) %>%
+    mutate(albedoYr=2018,
+           tsfYr=2018)
+)
+```
+
+```{r}
+( 
+  samp2017k = 
+    skSamples1k %>% 
+    dplyr::select(ID, ECO_NAME, alb2017, countYr:sumYr, burned, TSF2017, TimeSinceFire2017) %>%
+    rename(albedo=alb2017, TSF = TSF2017, TimeSinceFire=TimeSinceFire2017) %>%
+    mutate(albedoYr=2017,
+           tsfYr=2017)
+)
+```
+
+```{r}
+( 
+  samp2016k = 
+    skSamples1k %>% 
+    dplyr::select(ID, ECO_NAME, alb2016, countYr:sumYr, burned, TSF2016, TimeSinceFire2016) %>%
+    rename(albedo=alb2016, TSF = TSF2016, TimeSinceFire=TimeSinceFire2016) %>%
+    mutate(albedoYr=2016,
+           tsfYr=2016)
+)
+```
+
+```{r}
+( 
+  samp2015k = 
+    skSamples1k %>% 
+    dplyr::select(ID, ECO_NAME, alb2015, countYr:sumYr, burned, TSF2015, TimeSinceFire2015) %>%
+    rename(albedo=alb2015, TSF = TSF2015, TimeSinceFire=TimeSinceFire2015) %>%
+    mutate(albedoYr=2015,
+           tsfYr=2015)
+)
+```
+
+```{r}
+( 
+  samp2014k = 
+    skSamples1k %>% 
+    dplyr::select(ID, ECO_NAME, alb2014, countYr:sumYr, burned, TSF2014, TimeSinceFire2014) %>%
+    rename(albedo=alb2014, TSF = TSF2014, TimeSinceFire=TimeSinceFire2014) %>%
+    mutate(albedoYr=2014,
+           tsfYr=2014)
+)
+```
+
+```{r}
+( 
+  samp2013k = 
+    skSamples1k %>% 
+    dplyr::select(ID, ECO_NAME, alb2013, countYr:sumYr, burned, TSF2013, TimeSinceFire2013) %>%
+    rename(albedo=alb2013, TSF = TSF2013, TimeSinceFire=TimeSinceFire2013) %>%
+    mutate(albedoYr=2013,
+           tsfYr=2013)
+)
+```
+
+```{r}
+
+(
+  skdata1k =
+    bind_rows(samp2018k, samp2017k, samp2016k, samp2015k, samp2014k, samp2013k)
+)
+```
+```{r}
+unique(skdata1k$ECO_NAME)
+skdata1k %>% filter(ECO_NAME=="Northern Canadian Shield taiga" )
+```
+
+```{r}
+write.csv(skdata1k, '../outputs/cleanedSamplePoints/skStratifiedSample1k20180213v2.cvs', row.names=F)
+```
+
+
+
+
+
+
+
+
+
+

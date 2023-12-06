@@ -1,0 +1,112 @@
+---
+title: "MapReburnSummariesByEco"
+author: "Anna Talucci"
+date: "2023-11-30"
+output: html_document
+---
+
+# Overview
+Study area map
+# Packages
+```{r}
+library(sf)
+library(tidyverse)
+library(magrittr)
+library(pacman)
+library(ggnewscale)
+library(scales)
+```
+
+# Data 
+## Canada Proviences
+```{r}
+politcal = st_read("../data/boundaries/political/borealNA.shp", "borealNA")
+```
+
+## Ecoregions
+```{r}
+resolve = st_read("../data/boundaries/ecozones/resolve/ResolveBorealEcozones.shp", "ResolveBorealEcozones")
+```
+```{r}
+ecor = st_read("../data/boundaries/studyArea/StudyAreaEco.shp", "StudyAreaEco")
+```
+```{r}
+wrld = st_read("../data/boundaries/world/WB_countries_Admin0_10m.shp", "WB_countries_Admin0_10m")
+```
+
+
+
+# Filter world for all
+```{r}
+na  = wrld %>% 
+  filter(CONTINENT =="North America") %>%
+  dplyr::select( OBJECTID:FORMAL_EN, NAME_EN, ISO_A2, CONTINENT:REGION_WB, Shape_Leng:geometry) 
+```
+
+
+```{r}
+na
+```
+
+
+# Reproject
+```{r}
+proj = st_crs(political)
+```
+```{r}
+na_proj = st_transform(na, crs = proj)
+eco_proj = st_transform(ecor, crs = proj)
+resolve_proj = st_transform(resolve, crs = proj)
+```
+
+
+```{r}
+na_proj
+```
+```{r}
+( ca = na_proj %>% filter(FORMAL_EN=="Canada") )
+( us = na_proj %>% filter(FORMAL_EN=="United States of America") )
+( usaCan = na_proj %>% filter(FORMAL_EN %in% c("United States of America", "Canada")) )
+```
+```{r}
+political
+
+```
+# Palettes
+
+```{r}
+ecoPalette = c('#a6cee3','#b2df8a','#fb9a99','#fdbf6f','#ff7f00','#cab2d6','#ffff99')
+```
+ '#1f78b4', '#33a02c','#e31a1c','#6a3d9a',
+
+
+# Map
+ coord_sf(xlim = st_coordinates(disp_window)[,'X'], ylim = st_coordinates(disp_window)[,'Y']) +
+```{r}
+( map1 = ggplot() +
+     geom_sf(data = ca, fill = "#F9F6EE", colour="#A9AB9D") +
+    geom_sf(data = politcal, fill = "#F9F6EE", colour="#F9F6EE") +
+   
+  new_scale_fill() +
+  geom_sf(data = eco_proj, aes( fill = NA_L2NAME, color=NA_L2NAME)) +
+    scale_fill_manual(values=ecoPalette, name="Ecozones") +
+  scale_color_manual(values=ecoPalette, name="Ecozones") +
+
+  coord_sf() +
+    #coord_sf(xlim = disp_win_coord[,'X'], ylim = disp_win_coord[,'Y']) +
+  #coord_sf(xlim = c(-4002324, 3512498), ylim = c(-3008650,  4002452) ) +
+  theme(panel.grid.major = element_line(color = gray(0.5), linetype = "dashed", 
+        linewidth = 0.5), panel.background = element_rect(fill = "#C5D8D7")) +
+  theme(plot.margin=unit(c(0,0,0,0), "mm")) + 
+  theme(legend.position = "right",
+         legend.text=element_text(size=6),
+        legend.margin = margin(0, 0, 0, 0),
+        legend.title=element_text(size=7),
+         legend.key=element_blank(),
+        legend.key.size = unit(5, 'mm'),
+        axis.title.x = element_blank(), 
+        axis.title.y = element_blank()) +
+  guides(color = guide_legend(title.position = "top", ncol=1,bycol=TRUE, override.aes = list(size = 4)),
+         fill = guide_legend(title.position = "top", ncol=1,bycol=TRUE, override.aes = list(size = 4)))
+)
+```

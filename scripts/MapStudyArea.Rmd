@@ -1,0 +1,158 @@
+---
+title: "MapStudyArea"
+author: "Anna Talucci"
+date: "2023-10-17"
+output: html_document
+---
+
+# Overview
+Study area map
+# Packages
+```{r}
+library(sf)
+library(tidyverse)
+library(magrittr)
+library(pacman)
+library(ggnewscale)
+library(scales)
+```
+
+# Data 
+## Canada Proviences
+```{r}
+polit = st_read("../data/studyArea/StudyAreaPoliticalBounds.shp", "StudyAreaPoliticalBounds")
+```
+
+## Ecoregions
+```{r}
+ecor = st_read("../data/studyArea/StudyAreaEco.shp", "StudyAreaEco")
+```
+```{r}
+wrld = st_read("../data/world/WB_countries_Admin0_10m.shp", "WB_countries_Admin0_10m")
+```
+
+```{r}
+prov = st_read("../data/lpr_000b16a_e/lpr_000b16a_e.shp", "lpr_000b16a_e")
+```
+
+
+Filter for all
+```{r}
+na  = wrld %>% 
+  filter(CONTINENT =="North America") %>%
+  dplyr::select( OBJECTID:FORMAL_EN, NAME_EN, ISO_A2, CONTINENT:REGION_WB, Shape_Leng:geometry) 
+```
+
+
+```{r}
+na
+```
+```{r}
+political = st_read("../data/NorthAmerica/boundaries_p_2021_v3.shp", "boundaries_p_2021_v3")
+```
+
+# Reproject
+```{r}
+proj = st_crs(ecor)
+```
+```{r}
+na_proj = st_transform(na, crs = proj)
+eco_proj = st_transform(ecor, crs = proj)
+prov_proj = st_transform(prov, crs = proj)
+```
+
+```{r}
+na_proj
+```
+```{r}
+( ca = na_proj %>% filter(FORMAL_EN=="Canada") )
+( us = na_proj %>% filter(FORMAL_EN=="United States of America") )
+```
+
+# Palettes
+
+```{r}
+ecoPalette = c('#a6cee3','#b2df8a','#fb9a99','#fdbf6f','#ff7f00','#cab2d6','#ffff99')
+```
+ '#1f78b4', '#33a02c','#e31a1c','#6a3d9a',
+
+# Dispaly window
+```{r eval=FALSE, include=FALSE}
+#### zoom to kamchatka, different projection ####
+
+zoom_to <- c(180, 83)  # ~ center of Kamchatka
+zoom_level <- 2
+
+# Lambert azimuthal equal-area projection around center of interest
+target_crs <- polarProj#sprintf('+proj=laea +lon_0=%f +lat_0=%f', zoom_to[1], zoom_to[2])
+
+
+C <- 40075016.686   # ~ circumference of Earth in meters
+x_span <- C / 2^(zoom_level+.1)
+y_span <- C / 2^(zoom_level+.5)   # also sets aspect ratio
+
+zoom_to_xy <- st_transform(st_sfc(st_point(zoom_to), crs = 4326), crs = target_crs)
+zoom_to_xy
+
+disp_window <- st_sfc(st_point(st_coordinates(zoom_to_xy - c(x_span / 2, y_span / 2))),
+                      st_point(st_coordinates(zoom_to_xy + c(x_span / 2, y_span / 2))),
+                      crs = target_crs)
+
+```
+# Map
+ coord_sf(xlim = st_coordinates(disp_window)[,'X'], ylim = st_coordinates(disp_window)[,'Y']) +
+```{r}
+( overviewLegend = ggplot() +
+     geom_sf(data = na_proj, fill = "#F9F6EE", colour="#A9AB9D") +
+   
+  new_scale_fill() +
+  geom_sf(data = eco_proj, aes( fill = NA_L2NAME, color=NA_L2NAME)) +
+    scale_fill_manual(values=ecoPalette, name="Ecozones") +
+  scale_color_manual(values=ecoPalette, name="Ecozones") +
+
+  coord_sf() +
+    #coord_sf(xlim = disp_win_coord[,'X'], ylim = disp_win_coord[,'Y']) +
+  #coord_sf(xlim = c(-4002324, 3512498), ylim = c(-3008650,  4002452) ) +
+  theme(panel.grid.major = element_line(color = gray(0.5), linetype = "dashed", 
+        linewidth = 0.5), panel.background = element_rect(fill = "#C5D8D7")) +
+  theme(plot.margin=unit(c(0,0,0,0), "mm")) + 
+  theme(legend.position = "right",
+         legend.text=element_text(size=6),
+        legend.margin = margin(0, 0, 0, 0),
+        legend.title=element_text(size=7),
+         legend.key=element_blank(),
+        legend.key.size = unit(5, 'mm'),
+        axis.title.x = element_blank(), 
+        axis.title.y = element_blank()) +
+  guides(color = guide_legend(title.position = "top", ncol=1,bycol=TRUE, override.aes = list(size = 4)),
+         fill = guide_legend(title.position = "top", ncol=1,bycol=TRUE, override.aes = list(size = 4)))
+)
+```
+
+xmin: -2136236 ymin: -218763.3 xmax: 3324942 ymax: 4267884
+```{r}
+( boreal = ggplot() +
+     geom_sf(data = na_proj, fill = "#F9F6EE", colour="#A9AB9D") +
+   
+  new_scale_fill() +
+  geom_sf(data = eco_proj, fill = "#228B22", color="#228B22") +
+  geom_sf(data = prov_proj, fill = NA, colour="gray") +
+
+  #coord_sf() +
+    #coord_sf(xlim = disp_win_coord[,'X'], ylim = disp_win_coord[,'Y']) +
+  coord_sf(xlim = c( -3418828, 3324942), ylim = c(-218763.3,  4267884) ) +
+  theme(panel.grid.major = element_line(color = gray(0.5), linetype = "dashed", 
+        linewidth = 0.5), panel.background = element_rect(fill = "#C5D8D7")) +
+  theme(plot.margin=unit(c(0,0,0,0), "mm")) + 
+  theme(legend.position = "right",
+         legend.text=element_text(size=6),
+        legend.margin = margin(0, 0, 0, 0),
+        legend.title=element_text(size=7),
+         legend.key=element_blank(),
+        legend.key.size = unit(5, 'mm'),
+        axis.title.x = element_blank(), 
+        axis.title.y = element_blank()) +
+  guides(color = guide_legend(title.position = "top", ncol=1,bycol=TRUE, override.aes = list(size = 4)),
+         fill = guide_legend(title.position = "top", ncol=1,bycol=TRUE, override.aes = list(size = 4)))
+)
+```
