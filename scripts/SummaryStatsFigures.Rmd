@@ -103,12 +103,18 @@ unique(skdf1k$TimeSinceFire)
 (
   skdf1krecent = skdf1k %>% filter(TimeSinceFire %in% c("0", "1", "2-5")) 
     )
+
+(
+  skdf1krecentskonly = skdf1k %>% filter(TimeSinceFire %in% c("0", "1", "2-5")) %>% filter(ECO_NAME %in% c("Mid-Canada Boreal Plains forests", "Midwest Canadian Shield forests"))
+    )
 ```
 
 ```{r}
 (
   skdf1kold = skdf1k %>% filter(TimeSinceFire %in% c("0", "6-10", "11-20", "21-31")) 
     )
+
+skdf1koldSkOnly = skdf1k %>% filter(TimeSinceFire %in% c("0", "6-10", "11-20", "21-31"))%>% filter(ECO_NAME %in% c("Mid-Canada Boreal Plains forests", "Midwest Canadian Shield forests"))
 ```
 
 ```{r}
@@ -121,12 +127,12 @@ skdf1k %>% filter(ECO_NAME=="Northern Canadian Shield taiga" )
 # Figures
 
 ```{r}
-( skViolinAlb = ggplot(skdf1krecent, aes(x = burned, y=albedo)) +
+( skViolinAlbAll = ggplot(skdf1krecent, aes(x = burned, y=albedo)) +
   #geom_violin() + 
   
   geom_boxplot(aes(color=TimeSinceFire), width=0.7,position = position_dodge(width=0.9)) +
-  facet_wrap(~ECO_NAME) +
-    scale_color_manual(values=c('#1b9e77','#d95f02','#7570b3')) +
+  facet_wrap(~shldPln) +
+    scale_color_manual(name = "Time Since Fire", values=c('#1b9e77','#d95f02','#7570b3'), labels=c("unburned", "one year", "2-5 years")) +
   #stat_summary(fun=mean, geom="point", shape=23, size=2, color="red") +
   labs(x="Times burned", y="Spring albedo") +
     theme_bw()
@@ -135,17 +141,34 @@ skdf1k %>% filter(ECO_NAME=="Northern Canadian Shield taiga" )
 ```
 
 ```{r}
-ggsave("../figures/skBoxAlbedo1kRecentv2.png", plot = skViolinAlb, width = 8, height =5, units = c("in"), dpi=600, bg = "white" )
+ggsave("../figures/skBoxAlbedo1kRecentAllpointsv2.png", plot = skViolinAlbAll, width = 8, height =5, units = c("in"), dpi=600, bg = "white" )
+```
+```{r}
+( skViolinAlbskonly = ggplot(skdf1krecentskonly, aes(x = burned, y=albedo)) +
+  #geom_violin() + 
+  
+  geom_boxplot(aes(color=TimeSinceFire), width=0.7,position = position_dodge(width=0.9)) +
+  facet_wrap(~shldPln) +
+    scale_color_manual(name = "Time Since Fire", values=c('#1b9e77','#d95f02','#7570b3'), labels=c("unburned", "one year", "2-5 years")) +
+  #stat_summary(fun=mean, geom="point", shape=23, size=2, color="red") +
+  labs(x="Times burned", y="Albedo") +
+    theme_bw()
+  
+)
 ```
 
+```{r}
+ggsave("../figures/skBoxAlbedo1kRecentskOnlyv2.png", plot = skViolinAlbskonly, width = 8, height =6, units = c("in"), dpi=600, bg = "white" )
+```
 
+['#1b9e77','#d95f02','#7570b3','#e7298a','#66a61e','#e6ab02','#a6761d']
 ```{r}
 ( skViolinAlbOld = ggplot(skdf1kold, aes(x = burned, y=albedo)) +
   #geom_violin() + 
   
   geom_boxplot(aes(color=TimeSinceFire), width=0.7,position = position_dodge(width=0.9)) +
-  facet_wrap(~ECO_NAME) +
-    scale_color_manual(values=c('#a6cee3','#1f78b4','#b2df8a','#33a02c')) +
+  facet_wrap(~shldPln) +
+    scale_color_manual(values=c('#e7298a','#66a61e','#e6ab02','#a6761d')) +
   #stat_summary(fun=mean, geom="point", shape=23, size=2, color="red") +
   labs(x="Times burned", y="Spring albedo") +
     theme_bw()
@@ -156,6 +179,22 @@ ggsave("../figures/skBoxAlbedo1kRecentv2.png", plot = skViolinAlb, width = 8, he
 ggsave("../figures/skBoxAlbedo1kOldv2.png", plot = skViolinAlbOld, width = 8, height =5, units = c("in"), dpi=600, bg = "white" )
 ```
 
+```{r}
+( skViolinAlbOldOnly = ggplot(skdf1koldSkOnly, aes(x = burned, y=albedo)) +
+  #geom_violin() + 
+  
+  geom_boxplot(aes(color=TimeSinceFire), width=0.7,position = position_dodge(width=0.9)) +
+  facet_wrap(~shldPln) +
+    scale_color_manual(values=c('#e7298a','#66a61e','#e6ab02','#a6761d')) +
+  #stat_summary(fun=mean, geom="point", shape=23, size=2, color="red") +
+  labs(x="Times burned", y="Spring albedo") +
+    theme_bw()
+  
+)
+```
+skdf1koldSkOnly
+
+## LST
 ```{r}
 (skViolinLST = ggplot(skdf, aes(x = burned, y=ST_L8, color=TimeSinceFire)) +
   geom_violin() + 

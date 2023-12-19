@@ -507,12 +507,13 @@ write.csv(skSamples1k, '../outputs/cleanedSamplePoints/skStratifiedSample1kv2.cv
 
 (
   skdata1k =
-    bind_rows(samp2018k, samp2017k, samp2016k, samp2015k, samp2014k, samp2013k)
+    bind_rows(samp2018k, samp2017k, samp2016k, samp2015k, samp2014k, samp2013k) %>%
+    mutate(shldPln = ifelse(ECO_NAME=="Mid-Canada Boreal Plains forests", "Plains", "Shield"))
 )
 ```
 ```{r}
 unique(skdata1k$ECO_NAME)
-skdata1k %>% filter(ECO_NAME=="Northern Canadian Shield taiga" )
+skdata1k %>% filter(ECO_NAME=="Northern Canadian Shield taiga" ) 
 ```
 
 ```{r}
