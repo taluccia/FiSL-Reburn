@@ -1,0 +1,131 @@
+---
+title: "Figure Seasonal Albedo"
+author: "Anna Talucci"
+date: "2023-12-08"
+output: html_document
+---
+
+# Overview
+
+
+# Packages
+```{r}
+library(tidyverse)
+library(sf)
+```
+
+# Data
+```{r}
+season = read_csv("../data/samplePoints/cleanedSamplePoints/skStratifiedv2SeasonalAlb.cvs")
+```
+
+```{r}
+season
+```
+
+```{r}
+season = season %>% 
+  mutate(TimeSinceFire= ordered(TimeSinceFire, levels = c("0", "1", "2-5", "6-10", "11-20", "21-31", "Other")),
+         burned = ordered(burned, levels = c("Unburned", "One", "Two", "Three", "other")),
+         season = ordered(season, levels = c("winter", "spring", "summer", "autumn")))
+```
+
+```{r}
+(
+  seasonRecent = season %>% filter(TimeSinceFire %in% c("0", "1", "2-5")) %>% filter(albedo>0) %>% filter(ECO_NAME %in% c("Mid-Canada Boreal Plains forests", "Midwest Canadian Shield forests"))
+    )
+```
+
+```{r}
+seasonRecent %>% filter(albedo <0)
+```
+# Figures
+```{r}
+( seasonMean = seasonRecent %>% 
+  group_by(shldPln, TimeSinceFire, burned, season) %>% 
+  summarise(meanAlb = mean(albedo),
+            sdAlb = sd(albedo),
+            minAlb = min(albedo),
+            maxAlb = max(albedo))
+)
+```
+```{r}
+(unburn =  seasonMean %>% filter(burned=="Unburned") %>%
+ggplot( aes( x = season, y=meanAlb, color=TimeSinceFire, group=shldPln)) +
+  geom_point() + geom_line(aes(linetype=shldPln)) +
+    scale_color_manual(name = "Time Since Fire", values=c('#1b9e77'), label="unburned") +
+  scale_linetype_manual(name="Ecozones", values=c("solid", "dashed")) + 
+  labs(x="Seasons", y="Albedo") +
+    theme_bw()
+  
+)
+```
+```{r}
+ggsave("../figures/skSeasonAlbUnburn.png", plot = unburn, width = 6, height =4, units = c("in"), dpi=600, bg = "white" )
+```
+
+```{r}
+( one =  seasonMean %>% filter(burned=="One") %>%
+ggplot( aes( x = season, y=meanAlb,group = interaction(TimeSinceFire, shldPln), color=TimeSinceFire, linetype=shldPln)) +
+  geom_point() + geom_line() +
+    scale_color_manual(name = "Time Since Fire", values=c('#d95f02','#7570b3'), labels=c("one year", "2-5 years")) +
+  scale_linetype_manual(name="Ecozones", values=c("solid", "dashed")) +
+  labs(x="Seasons", y="Albedo") +
+    theme_bw()
+  
+)
+```
+
+```{r}
+ggsave("../figures/skSeasonAlbOne.png", plot = one, width = 6, height =4, units = c("in"), dpi=600, bg = "white" )
+```
+
+```{r}
+(two = seasonMean %>% filter(burned=="Two") %>%
+ggplot(  aes( x = season, y=meanAlb,group = interaction(TimeSinceFire, shldPln), color=TimeSinceFire, linetype=shldPln)) +
+  geom_point() + geom_line() +
+    scale_color_manual(name = "Time Since Fire", values=c('#d95f02','#7570b3'), labels=c("one year", "2-5 years")) +
+  scale_linetype_manual(name="Ecozones", values=c("solid", "dashed")) +
+  labs(x="Seasons", y="Albedo") +
+    theme_bw()
+  
+)
+```
+
+```{r}
+ggsave("../figures/skSeasonAlbTwo.png", plot = two, width = 6, height =4, units = c("in"), dpi=600, bg = "white" )
+```
+
+```{r}
+(three = seasonMean %>% filter(burned=="Three") %>%
+ggplot(  aes( x = season, y=meanAlb,group = interaction(TimeSinceFire, shldPln), color=TimeSinceFire, linetype=shldPln)) +
+  geom_point() + geom_line() +
+    scale_color_manual(name = "Time Since Fire", values=c('#d95f02','#7570b3'), labels=c("one year", "2-5 years")) +
+  scale_linetype_manual(name="Ecozones", values=c("solid", "dashed")) +
+  labs(x="Seasons", y="Albedo") +
+    theme_bw()
+  
+)
+```
+
+```{r}
+ggsave("../figures/skSeasonAlbThree.png", plot = three, width = 6, height =4, units = c("in"), dpi=600, bg = "white" )
+```
+
+```{r}
+
+ggplot( seasonMean,  aes( x = season, y=meanAlb,group = interaction(TimeSinceFire, burned, shldPln), color=TimeSinceFire, shape=burned, linetype=shldPln)) +
+  geom_point() + geom_line() +
+    scale_color_manual(values=c('#1b9e77', '#d95f02','#7570b3')) +
+  scale_linetype_manual(values=c("solid", "dashed")) +
+  labs(x="Seasons", y="Albedo") +
+    theme_bw()
+  
+
+```
+
+```{r}
+ seasonMean %>%  filter(shldPln=="Plains") %>% filter(burned=="Unburned") 
+  
+
+```

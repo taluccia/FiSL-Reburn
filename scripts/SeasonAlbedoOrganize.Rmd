@@ -1,0 +1,244 @@
+---
+title: "Season Albedo Samples"
+author: "Anna Talucci"
+date: "2023-12-08"
+output: html_document
+---
+
+# Overview
+
+# Packages
+```{r}
+library(tidyverse)
+library(sf)
+```
+
+# Data
+```{r}
+wnt = read_csv("../data/samplePoints/raw/sk/skAlb1000v2Wnt.csv") %>% dplyr::select(-.geo)
+spg = read_csv("../data/samplePoints/raw/sk/skAlb1000v2Spg.csv") %>% dplyr::select(-.geo)
+smr = read_csv("../data/samplePoints/raw/sk/skAlb1000v2Smr.csv") %>% dplyr::select(-.geo)
+atm = read_csv("../data/samplePoints/raw/sk/skAlb1000v2Atm.csv") %>% dplyr::select(-.geo)
+
+
+reburn = read_csv("../data/samplePoints/raw/sk/skReburn1000v2.csv") %>% dplyr::select(-.geo)
+```
+
+```{r}
+wnt
+```
+
+# Join
+```{r}
+wntr = wnt %>% full_join(., reburn, by=c("system:index", "ECO_NAME", "lat", "lon", "rowId"))
+spgr = spg %>% full_join(., reburn, by=c("system:index", "ECO_NAME", "lat", "lon", "rowId"))
+smmr = smr %>% full_join(., reburn, by=c("system:index", "ECO_NAME", "lat", "lon", "rowId"))
+atmn = atm %>% full_join(., reburn, by=c("system:index", "ECO_NAME", "lat", "lon", "rowId"))
+```
+
+# Function
+```{r}
+part1 = function(x){
+  x %>%
+  rename(ID = "system:index", countYr = count.x, maxYr=maxCA, medianYr=medianCA, minYr=minCA, sumYr=sumCA) %>%
+  mutate_at(c('maxYr', 'medianYr', 'minYr', 'sumYr'), ~replace_na(.,0)) %>%
+  mutate(burned = ifelse(countYr==0, "Unburned",
+                  ifelse(countYr==1, "One",
+                  ifelse(countYr==2, "Two",
+                  ifelse(countYr==3, "Three", "other"))))) %>%
+  mutate(TSF2018 = 2018-maxYr,
+         TSF2017 = 2017-maxYr,
+         TSF2016 = 2016-maxYr,
+         TSF2015 = 2015-maxYr,
+         TSF2014 = 2014-maxYr,
+         TSF2013 = 2013-maxYr) %>%
+    mutate(TimeSinceFire2018 = ifelse(countYr==0, "0",
+                               ifelse(TSF2018==1, "1",
+                               ifelse(TSF2018 %in% c(2, 3, 4, 5), "2-5",
+                              ifelse(TSF2018 %in% c(6, 7, 8, 9, 10), "6-10", 
+                              ifelse(TSF2018 %in% c(10:19), "11-20", 
+                               ifelse(TSF2018 %in% c(20:31), "21-31", "Other")))))))  %>% 
+  mutate(TimeSinceFire2017 = ifelse(countYr==0, "0",
+                               ifelse(TSF2017==1, "1",
+                               ifelse(TSF2017 %in% c(2, 3, 4, 5), "2-5",
+                              ifelse(TSF2017 %in% c(6, 7, 8, 9, 10), "6-10", 
+                              ifelse(TSF2017 %in% c(10:19), "11-20", 
+                               ifelse(TSF2017 %in% c(20:31), "21-31", "Other")))))))  %>% 
+  mutate(TimeSinceFire2016 = ifelse(countYr==0, "0",
+                               ifelse(TSF2016==1, "1",
+                               ifelse(TSF2016 %in% c(2, 3, 4, 5), "2-5",
+                              ifelse(TSF2016 %in% c(6, 7, 8, 9, 10), "6-10", 
+                              ifelse(TSF2016 %in% c(10:19), "11-20", 
+                               ifelse(TSF2016 %in% c(20:31), "21-31", "Other")))))))  %>% 
+  mutate(TimeSinceFire2015 = ifelse(countYr==0, "0",
+                               ifelse(TSF2015==1, "1",
+                               ifelse(TSF2015 %in% c(2, 3, 4, 5), "2-5",
+                              ifelse(TSF2015 %in% c(6, 7, 8, 9, 10), "6-10", 
+                              ifelse(TSF2015 %in% c(10:19), "11-20", 
+                               ifelse(TSF2015 %in% c(20:31), "21-31", "Other")))))))  %>% 
+  mutate(TimeSinceFire2014 = ifelse(countYr==0, "0",
+                               ifelse(TSF2014==1, "1",
+                               ifelse(TSF2014 %in% c(2, 3, 4, 5), "2-5",
+                              ifelse(TSF2014 %in% c(6, 7, 8, 9, 10), "6-10", 
+                              ifelse(TSF2014 %in% c(10:19), "11-20", 
+                               ifelse(TSF2014 %in% c(20:31), "21-31", "Other")))))))  %>% 
+  mutate(TimeSinceFire2013 = ifelse(countYr==0, "0",
+                               ifelse(TSF2013==1, "1",
+                               ifelse(TSF2013 %in% c(2, 3, 4, 5), "2-5",
+                              ifelse(TSF2013 %in% c(6, 7, 8, 9, 10), "6-10", 
+                              ifelse(TSF2013 %in% c(10:19), "11-20", 
+                               ifelse(TSF2013 %in% c(20:31), "21-31", "Other")))))))  %>% 
+  mutate(TimeSinceFire2018= ordered(TimeSinceFire2018, levels = c("0", "1", "2-5", "6-10", "11-20", "21-31", "Other")),
+         TimeSinceFire2017= ordered(TimeSinceFire2017, levels = c("0", "1", "2-5", "6-10", "11-20", "21-31", "Other")),
+         TimeSinceFire2016= ordered(TimeSinceFire2016, levels = c("0", "1", "2-5", "6-10", "11-20", "21-31", "Other")),
+         TimeSinceFire2015= ordered(TimeSinceFire2015, levels = c("0", "1", "2-5", "6-10", "11-20", "21-31", "Other")),
+         TimeSinceFire2014= ordered(TimeSinceFire2014, levels = c("0", "1", "2-5", "6-10", "11-20", "21-31", "Other")),
+         TimeSinceFire2013= ordered(TimeSinceFire2013, levels = c("0", "1", "2-5", "6-10", "11-20", "21-31", "Other")),
+         burned = ordered(burned, levels = c("Unburned", "One", "Two", "Three", "other"))) 
+}
+
+```
+
+
+
+
+
+
+# Apply function
+
+```{r}
+(wntAll = wntr %>% 
+    part1() %>% 
+    select(ID:rowId, maxYr:sumYr, water.y:TimeSinceFire2013) %>% 
+    rename(water=water.y) %>% 
+    mutate(season="winter",
+           alb2013=(-9999))
+)
+                                                                                                                                  
+```
+
+```{r}
+(
+  spgAll = spgr %>% 
+    part1() %>% 
+    select(ID:rowId, maxYr:sumYr, water.y:TimeSinceFire2013) %>% 
+    rename(water=water.y) %>% 
+    mutate(season="spring"))
+```
+
+```{r}
+( 
+  smrAll = smmr %>% 
+    part1() %>% 
+    select(ID:rowId, maxYr:sumYr, water.y:TimeSinceFire2013) %>% 
+    rename(water=water.y) %>% 
+    mutate(season="summer") )
+```
+
+```{r}
+( 
+  atmAll = atmn %>% 
+    part1() %>% 
+    select(ID:rowId, maxYr:sumYr, water.y:TimeSinceFire2013) %>% 
+    rename(water=water.y) %>% 
+    mutate(season="autumn"))
+```
+
+
+
+
+# Combine all data
+```{r}
+(
+  skdfSeason =
+    bind_rows(wntAll, spgAll, smrAll, atmAll) 
+)
+```
+
+# Functions Reorganize 
+```{r}
+fun2018 = function(x){
+    x %>% 
+    dplyr::select(ID, ECO_NAME, alb2018, countYr:sumYr, burned, season,  TSF2018, TimeSinceFire2018) %>%
+    rename(albedo=alb2018, TSF = TSF2018, TimeSinceFire=TimeSinceFire2018) %>%
+    mutate(albedoYr=2018,
+           tsfYr=2018)
+}
+```
+
+```{r}
+fun2017 = function(x){
+    x %>%  
+    dplyr::select(ID, ECO_NAME, alb2017, countYr:sumYr, burned, season, TSF2017, TimeSinceFire2017) %>%
+    rename(albedo=alb2017, TSF = TSF2017, TimeSinceFire=TimeSinceFire2017) %>%
+    mutate(albedoYr=2017,
+           tsfYr=2017)
+}
+```
+
+```{r}
+fun2016 = function(x){
+    x %>% 
+    dplyr::select(ID, ECO_NAME, alb2016, countYr:sumYr, burned, season, TSF2016, TimeSinceFire2016) %>%
+    rename(albedo=alb2016, TSF = TSF2016, TimeSinceFire=TimeSinceFire2016) %>%
+    mutate(albedoYr=2016,
+           tsfYr=2016)
+}
+```
+
+```{r}
+fun2015 = function(x){
+    x %>% 
+    dplyr::select(ID, ECO_NAME, alb2015, countYr:sumYr, burned, season, TSF2015, TimeSinceFire2015) %>%
+    rename(albedo=alb2015, TSF = TSF2015, TimeSinceFire=TimeSinceFire2015) %>%
+    mutate(albedoYr=2015,
+           tsfYr=2015)
+}
+```
+
+```{r}
+fun2014 = function(x){
+    x %>% 
+    dplyr::select(ID, ECO_NAME, alb2014, countYr:sumYr, burned, season, TSF2014, TimeSinceFire2014) %>%
+    rename(albedo=alb2014, TSF = TSF2014, TimeSinceFire=TimeSinceFire2014) %>%
+    mutate(albedoYr=2014,
+           tsfYr=2014)
+}
+```
+
+```{r}
+fun2013 = function(x){
+    x %>% 
+    dplyr::select(ID, ECO_NAME, alb2013, countYr:sumYr, burned, season, TSF2013, TimeSinceFire2013) %>%
+    rename(albedo=alb2013, TSF = TSF2013, TimeSinceFire=TimeSinceFire2013) %>%
+    mutate(albedoYr=2013,
+           tsfYr=2013)
+}
+```
+
+# Apply Reorganize function
+```{r}
+(df18 = skdfSeason %>% fun2018())
+df17 = skdfSeason %>% fun2017()
+df16 = skdfSeason %>% fun2016()
+df15 = skdfSeason %>% fun2015()
+df14 = skdfSeason %>% fun2014()
+df13 = skdfSeason %>% fun2013()
+```
+
+```{r}
+
+(
+  seasonDf =
+    bind_rows(df18, df17, df16, df15, df14, df13) %>%
+    mutate(shldPln = ifelse(ECO_NAME=="Mid-Canada Boreal Plains forests", "Plains", "Shield"))
+)
+```
+
+```{r}
+unique(seasonDf$season)
+```
+
+```{r}
+write.csv(seasonDf, '../outputs/cleanedSamplePoints/skStratifiedv2SeasonalAlb.cvs', row.names=F)
+```
