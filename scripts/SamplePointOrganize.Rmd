@@ -7,6 +7,8 @@ output: html_document
 
 # Overview
 
+Organize Albedo points from GEE.
+
 # Packages
 ```{r}
 library(tidyverse)
