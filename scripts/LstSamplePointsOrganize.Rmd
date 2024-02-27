@@ -1,0 +1,101 @@
+---
+title: "LST Point Organize"
+author: "Anna Talucci"
+date: "2024-02-27"
+output: html_document
+---
+
+# Packages
+```{r}
+library(tidyverse)
+library(sf)
+```
+
+# Data
+
+```{r}
+sklst1k = read_csv("../data/samplePoints/raw/sk/skLSTSummer2013To2018.csv") %>% dplyr::select(-.geo)
+```
+
+```{r}
+sklst1k
+```
+```{r}
+skreburn1k = read_csv("../data/samplePoints/raw/sk/skReburn1000v2.csv") %>% dplyr::select(-.geo)
+```
+
+# Clean
+```{r}
+sklst1k %>% 
+  full_join(., skreburn1k, by=c("system:index", "ECO_NAME", "lat", "lon", "rowId")) %>%
+  rename(ID = "system:index", countYr = count.x, water = water.x, maxYr=maxCA, medianYr=medianCA, minYr=minCA, sumYr=sumCA) %>%
+  mutate_at(c('maxYr', 'medianYr', 'minYr', 'sumYr'), ~replace_na(.,0))
+```
+
+```{r}
+(
+skLstReburn = sklst1k %>% 
+  full_join(., skreburn1k, by=c("system:index", "ECO_NAME", "lat", "lon", "rowId")) %>%
+  rename(ID = "system:index", countYr = count.x, maxYr=maxCA, medianYr=medianCA, minYr=minCA, sumYr=sumCA) %>%
+  
+  mutate_at(c('maxYr', 'medianYr', 'minYr', 'sumYr'), ~replace_na(.,0)) %>%
+  dplyr::select(ID:rowId, maxYr:sumYr, ST_L8, water) %>%
+  mutate(burned = ifelse(countYr==0, "Unburned",
+                  ifelse(countYr==1, "One",
+                  ifelse(countYr==2, "Two",
+                  ifelse(countYr==3, "Three", "other"))))) %>%
+  mutate(TSF2018 = 2018-maxYr,
+         TSF2017 = 2017-maxYr,
+         TSF2016 = 2016-maxYr,
+         TSF2015 = 2015-maxYr,
+         TSF2014 = 2014-maxYr,
+         TSF2013 = 2013-maxYr) %>%
+    mutate(TimeSinceFire2018 = ifelse(countYr==0, "0",
+                               ifelse(TSF2018==1, "1",
+                               ifelse(TSF2018 %in% c(2, 3, 4, 5), "2-5",
+                              ifelse(TSF2018 %in% c(6, 7, 8, 9, 10), "6-10", 
+                              ifelse(TSF2018 %in% c(10:19), "11-20", 
+                               ifelse(TSF2018 %in% c(20:31), "21-31", "Other")))))))  %>% 
+  mutate(TimeSinceFire2017 = ifelse(countYr==0, "0",
+                               ifelse(TSF2017==1, "1",
+                               ifelse(TSF2017 %in% c(2, 3, 4, 5), "2-5",
+                              ifelse(TSF2017 %in% c(6, 7, 8, 9, 10), "6-10", 
+                              ifelse(TSF2017 %in% c(10:19), "11-20", 
+                               ifelse(TSF2017 %in% c(20:31), "21-31", "Other")))))))  %>% 
+  mutate(TimeSinceFire2016 = ifelse(countYr==0, "0",
+                               ifelse(TSF2016==1, "1",
+                               ifelse(TSF2016 %in% c(2, 3, 4, 5), "2-5",
+                              ifelse(TSF2016 %in% c(6, 7, 8, 9, 10), "6-10", 
+                              ifelse(TSF2016 %in% c(10:19), "11-20", 
+                               ifelse(TSF2016 %in% c(20:31), "21-31", "Other")))))))  %>% 
+  mutate(TimeSinceFire2015 = ifelse(countYr==0, "0",
+                               ifelse(TSF2015==1, "1",
+                               ifelse(TSF2015 %in% c(2, 3, 4, 5), "2-5",
+                              ifelse(TSF2015 %in% c(6, 7, 8, 9, 10), "6-10", 
+                              ifelse(TSF2015 %in% c(10:19), "11-20", 
+                               ifelse(TSF2015 %in% c(20:31), "21-31", "Other")))))))  %>% 
+  mutate(TimeSinceFire2014 = ifelse(countYr==0, "0",
+                               ifelse(TSF2014==1, "1",
+                               ifelse(TSF2014 %in% c(2, 3, 4, 5), "2-5",
+                              ifelse(TSF2014 %in% c(6, 7, 8, 9, 10), "6-10", 
+                              ifelse(TSF2014 %in% c(10:19), "11-20", 
+                               ifelse(TSF2014 %in% c(20:31), "21-31", "Other")))))))  %>% 
+  mutate(TimeSinceFire2013 = ifelse(countYr==0, "0",
+                               ifelse(TSF2013==1, "1",
+                               ifelse(TSF2013 %in% c(2, 3, 4, 5), "2-5",
+                              ifelse(TSF2013 %in% c(6, 7, 8, 9, 10), "6-10", 
+                              ifelse(TSF2013 %in% c(10:19), "11-20", 
+                               ifelse(TSF2013 %in% c(20:31), "21-31", "Other")))))))  %>% 
+  mutate(TimeSinceFire2018= ordered(TimeSinceFire2018, levels = c("0", "1", "2-5", "6-10", "11-20", "21-31", "Other")),
+         TimeSinceFire2017= ordered(TimeSinceFire2017, levels = c("0", "1", "2-5", "6-10", "11-20", "21-31", "Other")),
+         TimeSinceFire2016= ordered(TimeSinceFire2016, levels = c("0", "1", "2-5", "6-10", "11-20", "21-31", "Other")),
+         TimeSinceFire2015= ordered(TimeSinceFire2015, levels = c("0", "1", "2-5", "6-10", "11-20", "21-31", "Other")),
+         TimeSinceFire2014= ordered(TimeSinceFire2014, levels = c("0", "1", "2-5", "6-10", "11-20", "21-31", "Other")),
+         TimeSinceFire2013= ordered(TimeSinceFire2013, levels = c("0", "1", "2-5", "6-10", "11-20", "21-31", "Other")),
+         burned = ordered(burned, levels = c("Unburned", "One", "Two", "Three", "other"))) %>%
+  filter(water==1) %>%
+  filter(lat >=55)
+
+)
+
+```
