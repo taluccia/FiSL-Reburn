@@ -26,7 +26,9 @@ library(aod)
 ```{r}
 skdf1k = read_csv("../data/samplePoints/cleanedSamplePoints/skStratifiedSample1k20180213v2.cvs")
 ```
-
+```{r}
+skdf1k
+```
 # check factors
 
 ```{r}

@@ -26,20 +26,11 @@ skreburn1k = read_csv("../data/samplePoints/raw/sk/skReburn1000v2.csv") %>% dply
 
 # Clean
 ```{r}
-sklst1k %>% 
+( lstclean = sklst1k %>% 
   full_join(., skreburn1k, by=c("system:index", "ECO_NAME", "lat", "lon", "rowId")) %>%
   rename(ID = "system:index", countYr = count.x, water = water.x, maxYr=maxCA, medianYr=medianCA, minYr=minCA, sumYr=sumCA) %>%
-  mutate_at(c('maxYr', 'medianYr', 'minYr', 'sumYr'), ~replace_na(.,0))
-```
-
-```{r}
-(
-skLstReburn = sklst1k %>% 
-  full_join(., skreburn1k, by=c("system:index", "ECO_NAME", "lat", "lon", "rowId")) %>%
-  rename(ID = "system:index", countYr = count.x, maxYr=maxCA, medianYr=medianCA, minYr=minCA, sumYr=sumCA) %>%
-  
   mutate_at(c('maxYr', 'medianYr', 'minYr', 'sumYr'), ~replace_na(.,0)) %>%
-  dplyr::select(ID:rowId, maxYr:sumYr, ST_L8, water) %>%
+  dplyr::select(ID:rowId, maxYr:sumYr, water) %>%
   mutate(burned = ifelse(countYr==0, "Unburned",
                   ifelse(countYr==1, "One",
                   ifelse(countYr==2, "Two",
@@ -95,7 +86,90 @@ skLstReburn = sklst1k %>%
          burned = ordered(burned, levels = c("Unburned", "One", "Two", "Three", "other"))) %>%
   filter(water==1) %>%
   filter(lat >=55)
-
 )
+```
 
+
+## Reorganize 
+```{r}
+( 
+  samp2018k = 
+    lstclean %>% 
+    dplyr::select(ID, ECO_NAME, lst2018, countYr:sumYr, burned, TSF2018, TimeSinceFire2018) %>%
+    rename(lst=lst2018, TSF = TSF2018, TimeSinceFire=TimeSinceFire2018) %>%
+    mutate(lstYr=2018,
+           tsfYr=2018)
+)
+```
+
+```{r}
+( 
+  samp2017k = 
+    lstclean %>% 
+    dplyr::select(ID, ECO_NAME, lst2017, countYr:sumYr, burned, TSF2017, TimeSinceFire2017) %>%
+    rename(lst=lst2017, TSF = TSF2017, TimeSinceFire=TimeSinceFire2017) %>%
+    mutate(lstYr=2017,
+           tsfYr=2017)
+)
+```
+
+```{r}
+( 
+  samp2016k = 
+    lstclean %>% 
+    dplyr::select(ID, ECO_NAME, lst2016, countYr:sumYr, burned, TSF2016, TimeSinceFire2016) %>%
+    rename(lst=lst2016, TSF = TSF2016, TimeSinceFire=TimeSinceFire2016) %>%
+    mutate(lstYr=2016,
+           tsfYr=2016)
+)
+```
+
+```{r}
+( 
+  samp2015k = 
+    lstclean %>% 
+    dplyr::select(ID, ECO_NAME, lst2015, countYr:sumYr, burned, TSF2015, TimeSinceFire2015) %>%
+    rename(lst=lst2015, TSF = TSF2015, TimeSinceFire=TimeSinceFire2015) %>%
+    mutate(lstYr=2015,
+           tsfYr=2015)
+)
+```
+
+```{r}
+( 
+  samp2014k = 
+    lstclean %>% 
+    dplyr::select(ID, ECO_NAME, lst2014, countYr:sumYr, burned, TSF2014, TimeSinceFire2014) %>%
+    rename(lst=lst2014, TSF = TSF2014, TimeSinceFire=TimeSinceFire2014) %>%
+    mutate(lstYr=2014,
+           tsfYr=2014)
+)
+```
+
+```{r}
+( 
+  samp2013k = 
+    lstclean %>% 
+    dplyr::select(ID, ECO_NAME, lst2013, countYr:sumYr, burned, TSF2013, TimeSinceFire2013) %>%
+    rename(lst=lst2013, TSF = TSF2013, TimeSinceFire=TimeSinceFire2013) %>%
+    mutate(lstYr=2013,
+           tsfYr=2013)
+)
+```
+
+```{r}
+
+(
+  sklstdata1k =
+    bind_rows(samp2018k, samp2017k, samp2016k, samp2015k, samp2014k, samp2013k) %>%
+    mutate(shldPln = ifelse(ECO_NAME=="Mid-Canada Boreal Plains forests", "Plains", "Shield"))
+)
+```
+```{r}
+unique(skdata1k$ECO_NAME)
+skdata1k %>% filter(ECO_NAME=="Northern Canadian Shield taiga" ) 
+```
+
+```{r}
+write.csv(skdata1k, '../outputs/cleanedSamplePoints/skStratifiedSample1k20182013LST.cvs', row.names=F)
 ```
