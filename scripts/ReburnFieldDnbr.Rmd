@@ -1,0 +1,82 @@
+---
+title: "Reburn Field point dNBR"
+author: "Anna Talucci"
+date: "2024-03-19"
+output: html_document
+---
+
+# Overview
+
+Evaluate the dNBR values form Landsat for field sites that experienced reburn
+
+
+# Packages
+```{r}
+library(tidyverse)
+library(sf)
+```
+
+# Data
+```{r}
+file_list <- list.files(path = "../data/fieldDnbr/",
+                pattern = "*.csv", full.names = TRUE)
+```
+
+```{r}
+file_list
+```
+
+```{r}
+li <- purrr::map(file_list,
+function(file){
+df <- read.csv(file)
+
+current_names <- names(df)
+
+# find what names are missing
+# do mutate(missing_names = NA)
+
+return(df)
+}
+)
+```
+
+```{r}
+dnbr = bind_rows(li) 
+```
+
+# Dataframe
+
+```{r}
+head(dnbr)
+```
+
+# Figures
+
+## Boxplot dNBR for field sites split by most recent burn year
+
+```{r}
+ggplot(dnbr, aes(x=as.factor(rcnt_br), y=dnbr)) +
+  geom_boxplot() +
+  theme_minimal() +
+  labs(x="Year of most recent burn", y="dNBR")
+```
+
+## Boxplot dNBR for field sites split by time between burns
+
+```{r}
+ggplot(dnbr, aes(x=as.factor(rebrn_g), y=dnbr)) +
+  geom_boxplot() +
+  theme_minimal() +
+  labs(x="Time between fire events", y="dNBR")
+```
+
+## Boxplot dNBR for field sites split by time between burns with points
+
+```{r}
+ggplot(dnbr, aes(x=as.factor(rebrn_g), y=dnbr)) +
+  geom_boxplot(color="#91bfdb") +
+  geom_point(aes(position = "dodge"), shape=1, color="#fc8d59", size=2) +
+  theme_minimal() +
+  labs(x="Time between fire events", y="dNBR")
+```
