@@ -51,13 +51,22 @@ dnbr = bind_rows(li)
 head(dnbr)
 ```
 
+## Number of sites with dNBR above or below 100
+
+n=306 greater than 100
+
+n=90 less than 100
+
+```{r eval=FALSE, include=FALSE}
+dnbr %>% filter(dnbr >= 100)
+```
 # Figures
 
 ## Boxplot dNBR for field sites split by most recent burn year
 
 ```{r}
 ggplot(dnbr, aes(x=as.factor(rcnt_br), y=dnbr)) +
-  geom_boxplot() +
+  geom_boxplot(color="#91bfdb") +
   theme_minimal() +
   labs(x="Year of most recent burn", y="dNBR")
 ```
@@ -66,7 +75,7 @@ ggplot(dnbr, aes(x=as.factor(rcnt_br), y=dnbr)) +
 
 ```{r}
 ggplot(dnbr, aes(x=as.factor(rebrn_g), y=dnbr)) +
-  geom_boxplot() +
+  geom_boxplot(color="#91bfdb") +
   theme_minimal() +
   labs(x="Time between fire events", y="dNBR")
 ```
