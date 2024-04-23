@@ -1,0 +1,95 @@
+---
+title: "landsatSceneFromEE"
+author: "Anna Talucci"
+date: "2024-04-23"
+output: html_document
+---
+
+
+
+```{r}
+
+library(tidyverse)
+```
+
+```{r}
+list = list.files(path="../data/landsatScenes", pattern ="csv$", full.name=TRUE)
+```
+
+```{r}
+list
+```
+
+```{r}
+names(list) = tools::file_path_sans_ext(basename(list))
+```
+
+Function to read in csv and bind rows
+```{r}
+readCombine = function(list){
+  purrr::map(list, read.csv) %>%
+    map2(names(.), ~mutate(.x, fileName=.y)) %>%
+    bind_rows()
+}
+```
+
+```{r}
+df = list %>% readCombine() %>% dplyr::select(!.geo)
+```
+
+```{r}
+df
+```
+
+SK Albedo Scenes
+
+```{r}
+(skAlbedo  = df %>% filter(!is.na(mean)) %>% dplyr::select(ACQDayL7, ACQDayL8, ISO_A2, PATH, ROW, PR, mean, fileName ))
+```
+
+```{r}
+unique(skAlbedo$PR)
+cat(paste0(sprintf('%s', unique(skAlbedo$PR)), collapse='","'))
+```
+
+```{r}
+
+sk_target = c("45017","45018","45019","36017","36018","36019","36020","36021","36022","36023","36024","43017","43018","43019","43020","43021","34018","34019","34020","34021","34022","34023","34024","41017","41018","41019","41020","41021","41022","41023","41024","39017","39018","39019","39020","39021","39022","39023","39024","37017","37018","37019","37020","37021","37022","37023","37024","44017","44018","44019","44020","44021","35018","35019","35020","35021","35022","35023","35024","42017","42018","42019","42020","42021","42022","42023","33020","33021","33022","33023","33024","40017","40018","40019","40020","40021","40022","40023","40024","38017","38018","38019","38020","38021","38022","38023","38024")
+```
+
+Remove Albedo select from df
+AK Data
+```{r}
+(dfAK = df %>% filter(fileName!='LandsatSceneMeanAlbSK') %>% filter(ISO_A2=="US") %>%
+   mutate(maxYear = ifelse(fileName == "LandsatScenePixCtReburn2013AK", "2013",
+                    ifelse(fileName == "LandsatScenePixCtReburn2014AK", "2014",
+                    ifelse(fileName == "LandsatScenePixCtReburn2015AK", "2015",
+                    ifelse(fileName == "LandsatScenePixCtReburn2016AK", "2016",
+                    ifelse(fileName == "LandsatScenePixCtReburn2017AK", "2017",
+                    ifelse(fileName == "LandsatScenePixCtReburn2018AK", "2018",
+                    ifelse(fileName == "LandsatScenePixCtReburn2019AK", "2019",
+                    ifelse(ifelse(fileName == "LandsatScenePixCtReburn2020AK", "2020", "2021")))))))))) %>% 
+   dplyr::select(ACQDayL7, ACQDayL8, ISO_A2, PATH, ROW, PR, count, maxYear) %>%
+   filter(count >0)
+)
+```
+
+```{r}
+(dfCA = df %>% filter(fileName!='LandsatSceneMeanAlbSK') %>% filter(ISO_A2=="CA") %>%
+   mutate(maxYear = ifelse(fileName == "LandsatScenePixCtReburn2013CA", "2013",
+                    ifelse(fileName == "LandsatScenePixCtReburn2014CA", "2014",
+                    ifelse(fileName == "LandsatScenePixCtReburn2015CA", "2015",
+                    ifelse(fileName == "LandsatScenePixCtReburn2016CA", "2016",
+                    ifelse(fileName == "LandsatScenePixCtReburn2017CA", "2017",
+                    ifelse(fileName == "LandsatScenePixCtReburn2018CA", "2018",
+                    ifelse(fileName == "LandsatScenePixCtReburn2019CA", "2019",
+                    ifelse(ifelse(fileName == "LandsatScenePixCtReburn2020CA", "2020", "2021")))))))))) %>% 
+   dplyr::select(ACQDayL7, ACQDayL8, ISO_A2, PATH, ROW, PR, count, maxYear) %>%
+   filter(count >0) %>%
+   filter(!PR %in% sk_target) 
+)
+```
+
+```{r}
+
+```

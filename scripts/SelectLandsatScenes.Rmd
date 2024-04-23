@@ -1,0 +1,116 @@
+---
+title: "Select Landsat Scenes"
+author: "Anna Talucci"
+date: "2024-04-22"
+output: html_document
+---
+
+# Overview
+Select Landsat scenes of interest for other reburn areas. 
+
+Exclude military base areas in AK
+
+
+# Packages
+```{r}
+library(sf)
+library(tidyverse)
+library(terra)
+library(magrittr)
+library(pacman)
+library(ggnewscale)
+library(scales)
+```
+
+# Data 
+## Federal Lands
+```{r}
+fed = st_read("../data/boundaries/USA_Federal_Lands/USA_Federal_Lands.shp", "USA_Federal_Lands")
+```
+
+## Landsat scenes
+```{r}
+scenes = st_read("../data/boundaries/WRS2_descending_0/WRS2_descending.shp", "WRS2_descending")
+```
+
+
+```{r}
+wrld = st_read("../data/boundaries/world/WB_countries_Admin0_10m.shp", "WB_countries_Admin0_10m")
+```
+
+
+    
+# Data Structure
+
+```{r}
+glimpse(fed)
+glimpse(scenes)
+glimpse(wrld)
+```
+
+```{r}
+unique(fed$ADMIN1)
+unique(wrld$SUBREGION)
+```
+
+# Select Polygons
+
+## Fed select AK
+
+```{r}
+( akFed = fed %>% filter(STATE=="AK") %>% filter(ADMIN1 != "DOD"))
+
+```
+
+```{r}
+unique(akFed$ADMIN1)
+```
+
+
+## World NA
+
+```{r}
+( northAm = wrld %>% filter(SUBREGION=="Northern America") %>% filter(FORMAL_EN %in% c("United States of America", "Canada")))
+```
+
+```{r}
+unique(akFed$ADMIN1)
+```
+
+
+# Instersection of Scenes with North America
+
+```{r}
+( join = st_join(scenes, northAm) )
+```
+
+```{r}
+( scenesNA = join %>% filter(FORMAL_EN%in% c("United States of America", "Canada")) %>% dplyr::select(AREA:REGION_WB, Shape_Leng:geometry) %>% filter(ROW<=30) %>% filter(ROW>=10))
+```
+
+
+# Save shapefile
+```{r eval=FALSE, include=FALSE}
+st_write(scenesNA, "../outputs/boundaries/selectLandsatScenes.shp", driver="ESRI Shapefile")
+```
+## LAndsat scene info
+```{r}
+unique(scenesNA$ROW)
+```
+
+# Map check 
+
+```{r}
+ggplot() +
+     geom_sf(data = northAm, fill = "#F9F6EE", colour="#A9AB9D") +
+  geom_sf(data = scenesNA, fill = NA, color="black") +
+  coord_sf() +
+  theme_bw()
+```
+
+
+# Overlay Raster with Fed land
+
+```{r}
+
+```
