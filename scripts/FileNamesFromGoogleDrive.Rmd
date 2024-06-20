@@ -1,0 +1,70 @@
+---
+title: "Pull File names from google drive folder"
+author: "Anna Talucci"
+date: "2024-06-17"
+output: html_document
+---
+
+
+```{r}
+library(googledrive)
+library(tidyverse)
+```
+# Authenticate your Google account
+```{r}
+drive_deauth()
+```
+
+
+```{r}
+drive_auth()
+```
+# Specify the folder ID
+```{r}
+folder_id <- "Landsat8Collection1ScenesAK"
+```
+
+```{r}
+my_folder_url = "https://drive.google.com/drive/folders/1hDdzt64CY1-Dl4ePmT-Kv0LpsgkPJY4Y"
+files <- googledrive::drive_ls(path = my_folder_url) # working! 
+```
+
+```{r}
+drive_get("~/Landsat8Collection1ScenesAK/")
+```
+```{r}
+drive_get(as_id(Landsat8Collection1ScenesAK))
+```
+```{r}
+drive_ls()
+```
+# List files in the specified folder
+
+```{r}
+files_in_folder <- drive_ls(path='~/Landsat8Collection1ScenesAK/')
+```
+
+# Extract the file names
+```{r}
+file_names <- files_in_folder$name
+```
+
+```{r}
+ak_files = data.frame(file_names)
+```
+
+```{r}
+ak_files
+```
+
+```{r}
+( sceneDate = ak_files %>% 
+    tidyr::separate(., file_names, 
+                 into = c("file" , "ext"), 
+                 sep = ".|\\s", remove = FALSE, fill = "left", convert = TRUE) )
+
+```
+
+```{r}
+write.csv(ak_files, '../outputs/landsatScenes/LandsatCol1DlFileNamesAK.csv', row.names=F)
+```

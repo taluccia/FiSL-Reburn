@@ -1,0 +1,185 @@
+---
+title: "Figure Map"
+author: "Anna Talucci"
+date: "2024-05-15"
+output: html_document
+---
+
+
+
+
+
+
+# clear environment
+```{r}
+rm(list=ls())
+```
+
+
+# Overview
+Creat over view map with permafrost extent and summary of site data.
+Notes:From PCN-Fire-Sysnthesis "Manuscript Map"
+[Better colors for Mapping](https://www.esri.com/arcgis-blog/products/js-api-arcgis/mapping/better-colors-for-better-mapping/)
+# Packages
+```{r}
+library(tidyverse)
+library(sf)
+library(rnaturalearth)
+library(rnaturalearthdata)
+library(RColorBrewer)
+library(cowplot)
+library(ggpubr)
+library(ggnewscale)
+library(scales)
+library(ggrepel)
+library(patchwork)
+```
+
+
+
+# Data
+
+```{r}
+res = st_read("../data/spatialData/RESOLVE_Ecoregions_and_Biomes/Biomes_and_Ecoregions_2017.shp", "Biomes_and_Ecoregions_2017")
+```
+
+```{r}
+na_boreal = res %>% filter(BIOME_NUM==6)
+```
+
+
+
+```{r eval=FALSE, include=FALSE}
+na_boreal = res %>% filter(ECO_NAME %in% c("Interior Alaska-Yukon lowland taiga", "Northwest Territories taiga",  
+"Watson Highlands taiga", "Northern Cordillera forests", "Muskwa-Slave Lake taiga",
+"Northern Canadian Shield taiga", " Midwest Canadian Shield forests", "Mid-Canada Boreal Plains forests",
+"Southern Hudson Bay taiga", "Central Canadian Shield forests", "Eastern Canadian Shield taiga", 
+"Eastern Canadian forests",   "Midwest Canadian Shield forests"))
+```
+
+
+## World map
+https://datacatalog.worldbank.org/dataset/world-bank-official-boundaries
+
+```{r}
+wrld = st_read("../data/spatialData/world/WB_countries_Admin0_10m.shp", "WB_countries_Admin0_10m")
+```
+
+
+```{r}
+na = wrld %>% filter(FORMAL_EN %in% c("Canada", "United States of America"))
+```
+
+
+
+
+
+
+
+
+
+## Get Eco Projection
+
+```{r}
+st_crs(res)
+( ecozoneProjection = st_crs(res)$proj4string )
+```
+
+
+```{r}
+projection = "+proj=aea +lon_0=-108.984375 +lat_1=48.2911002 +lat_2=69.1799501 +lat_0=58.7355252 +datum=WGS84 +units=m +no_defs"
+```
+# Reproject
+
+```{r}
+na_pp = st_transform(na, crs = projection)
+boreal_pp = st_transform(na_boreal, crs = projection)
+```
+
+# Palettes
+
+```{r}
+brltnd_palette = c('#4a6741', '#3d3021')
+```
+
+# Maps
+
+## Zoom Level
+## Map area zoom
+```{r}
+#### zoom to kamchatka, different projection ####
+
+zoom_to <- c(-97.93, 63.84)  # ~ center of Kamchatka
+zoom_level <- 2.6
+
+# Lambert azimuthal equal-area projection around center of interest
+#target_crs <- polarProj#sprintf('+proj=laea +lon_0=%f +lat_0=%f', zoom_to[1], zoom_to[2])
+
+
+C <- 40075016.686   # ~ circumference of Earth in meters
+x_span <- C / 2^(zoom_level+.1)
+y_span <- C / 2^(zoom_level+.6)   # also sets aspect ratio
+
+zoom_to_xy <- st_transform(st_sfc(st_point(zoom_to), crs = 4326), crs = projection)
+zoom_to_xy
+
+disp_window <- st_sfc(st_point(st_coordinates(zoom_to_xy - c(x_span / 2, y_span / 2))),
+                      st_point(st_coordinates(zoom_to_xy + c(x_span / 2, y_span / 2))),
+                      crs = projection)
+
+```
+
+
+
+# Build Overview map by Ecozone
+
+```{r map, echo=FALSE}
+( basicBorealMap = ggplot() +
+     geom_sf(data = na_pp, fill = "#F9F6EE", colour="#F9F6EE") +
+    geom_sf(data = boreal_pp, fill='#4a6741', color='#4a6741') +
+  
+  #coord_sf() +
+  
+  coord_sf(xlim = st_coordinates(disp_window)[,'X'], ylim = st_coordinates(disp_window)[,'Y']) +
+  theme(panel.grid.major = element_line(color = gray(0.5), linetype = "dashed", linewidth = 0.5), 
+        panel.background = element_rect(fill = "#C5D8D7")) +
+  theme(plot.margin=unit(c(0,0,0,0), "mm")) + 
+  theme(legend.position = "bottom", 
+        axis.title.x = element_blank(), 
+        axis.title.y = element_blank(),
+        axis.text.x = element_text(size = 14, color = "black"),
+        axis.text.y = element_text(size = 14, color = "black")) 
+)
+
+```
+
+
+```{r eval=FALSE, include=FALSE}
+ggsave("../figures/MapBasicBorealPoster.png", plot = basicBorealMap, width = 8, height =6, units = c("in"), dpi=600, bg = "white" )
+```
+
+
+# Raster data Reburns
+
+
+
+
+
+
+# Combine Map and Legend
+
+## Resolve
+
+### Grid map with legend Bottom
+```{r fig.height=6, fig.width=6}
+MapBottomLegendResolve = ggdraw(xlim = c(0, 6), ylim = c(0, 6)) +
+    draw_plot(overviewMapRes, x = 0, y = 0, width = 6, height = 6) + 
+  draw_image("../images/legendBottomResolve.PNG", scale = 0.99, x = .2, y = -0.1, width = 6, height = 1) 
+```
+
+### Save Image
+```{r eval=FALSE, include=FALSE}
+ggsave("../figures/PCNMapOverviewBottomLegendResolve.png", plot = MapBottomLegendResolve, dpi = 600, width = 6, height = 6, bg='white')
+```
+
+

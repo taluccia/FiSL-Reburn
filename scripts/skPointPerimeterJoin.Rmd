@@ -1,0 +1,140 @@
+---
+title: "SK Sample points join fires"
+author: "Anna Talucci"
+date: "2024-04-29"
+output: html_document
+---
+
+
+# Overview
+
+
+# Packages
+```{r}
+library(tidyverse)
+library(sf)
+```
+
+
+# Data
+```{r}
+sk = read_csv("../data/samplePoints/cleanedSamplePoints/skStratifiedSample1k20180213v2.cvs")
+```
+
+
+```{r}
+cafires = st_read("../data/boundaries/firePerimeters/CanadaFires1986-2021.shp", "CanadaFires1986-2021")
+```
+
+# csv to points
+```{r}
+sk
+```
+
+
+## Function to make points
+```{r}
+df_to_sf <- function(x){
+  st_as_sf(x, coords = c("lon","lat"), crs = 4326, remove = FALSE)
+}
+```
+
+## Drop Lat Lon NA and convert to shapefile 
+```{r}
+( skpts = sk %>% 
+    df_to_sf() )
+```
+
+
+# Reproject
+
+```{r}
+fireProj = st_crs(cafires)
+```
+
+```{r}
+( skptsProj = st_transform(skpts, fireProj) )
+```
+
+# join
+```{r}
+joinToPoints = st_join(skptsProj, cafires)
+```
+
+```{r}
+joinToPoints
+```
+
+filter(burned !="Unburned") %>% filter(TimeSinceFire %in% c("2-5", "1"))
+```{r}
+joinToPoints %>% 
+  st_drop_geometry() %>% 
+  dplyr::select(ID:shldPln, YEAR, NFIREID, PRENAME) %>% 
+  filter(burned !="Unburned")  %>%
+    group_by(ID)
+
+```
+
+```{r}
+joinToPoints %>% 
+  st_drop_geometry() %>%
+  dplyr::select(ID:shldPln, YEAR, NFIREID, PRENAME) %>% 
+   filter(burned !="Unburned")  %>%
+  group_by(ID) %>%
+  mutate(V = row_number()) %>%
+  ungroup() %>%
+  pivot_wider(
+    id_cols = ID,
+    names_from = V,
+    values_from =  !c(ID:shldPln),
+    values_fill = NA) 
+```
+
+```{r}
+( dfOrg = joinToPoints %>% 
+  st_drop_geometry() %>%
+  dplyr::select(ID:shldPln, YEAR, NFIREID, PRENAME) %>% 
+   filter(burned !="Unburned")  %>%
+  dplyr::select(ID, YEAR, NFIREID) %>% 
+  group_by(ID) %>%
+  distinct() %>%
+  arrange(YEAR) %>%
+  mutate(groupId = row_number()) %>%
+  mutate(fireNum = ifelse(groupId == 1, "fire_1",
+                      ifelse(groupId == 2, "fire_2",
+                          ifelse(groupId == 3, "fire_3", "F")))) %>%
+    dplyr::select(!groupId) %>%
+    pivot_wider(names_from = fireNum, values_from = c(YEAR, NFIREID))
+)
+```
+
+```{r}
+unique(dfOrg$groupId)
+```
+
+# Rejoin to sk dataframe
+```{r}
+unique(sk$burned)
+```
+
+```{r}
+( dfLag = sk %>% full_join(., dfOrg, by="ID") %>% filter(burned %in% c("Two", "Three")) %>%
+  mutate(lag1 = YEAR_fire_2- YEAR_fire_1) %>%
+  mutate(lag2 = YEAR_fire_3- YEAR_fire_2)
+  
+)
+```
+
+```{r}
+two = dfLag %>% filter(burned == "Two")
+three = dfLag %>% filter(burned == "Three")
+```
+
+```{r}
+unique(sort(two$lag1))
+unique(sort(three$lag1))
+unique(sort(three$lag2))
+```
+
+
+

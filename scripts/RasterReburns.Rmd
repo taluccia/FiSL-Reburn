@@ -1,0 +1,35 @@
+---
+title: "Raster Mosaic"
+author: "Anna Talucci"
+date: "2024-05-15"
+output: html_document
+---
+
+# clear environment
+```{r}
+rm(list=ls())
+```
+
+
+# Overview
+
+# Packages
+```{r}
+library(sf)
+library(terra)
+```
+
+# Data
+```{r}
+rast("../data/rasterReburn/AK/AlaskaReburn-0000000000-0000000000.tif")
+```
+
+```{r}
+files <- list.files("../data/rasterReburn/AK/", pattern='tif$',
+                    full.names = TRUE) 
+```
+
+```{r}
+x <- sprc(files) 
+m <- mosaic(x)
+```

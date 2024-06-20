@@ -1,0 +1,394 @@
+---
+title: "Sampled Points AK Canada clean"
+author: "Anna Talucci"
+date: "2024-05-16"
+output: html_document
+---
+
+```{r clearenvironment, include=FALSE}
+rm(list=ls())
+```
+
+# Overview
+
+Organize Albedo points from GEE.
+
+# Packages
+```{r}
+library(tidyverse)
+library(sf)
+```
+
+# Data
+
+```{r}
+
+caAlb = read_csv("../data/eeSampledData/sampleCAalbedo2018.csv") %>% dplyr::select(-.geo)
+
+cafire = read_csv("../data/eeSampledData/sampleFireCA2018.csv") %>% dplyr::select(-.geo)
+```
+```{r}
+akAlb = read_csv("../data/eeSampledData/sampleAKalbedo2018.csv") %>% dplyr::select(-.geo)
+akfire = read_csv("../data/eeSampledData/sampleFireAK2018.csv") %>% dplyr::select(-.geo)
+```
+
+```{r}
+fires = st_read("../data/spatialDataCreate/combineFires/Boreal4326Fires1986-2021.shp", "Boreal4326Fires1986-2021")
+```
+
+
+
+# Dataframes
+```{r}
+caAlb
+cafire
+```
+
+```{r}
+akAlb
+akfire
+```
+
+
+# Join
+
+
+
+```{r}
+( caJoined = caAlb %>% 
+    full_join(., cafire, by=c('system:index', 'latitude', 'longitude', 'countCA', "ECO_NAME")) %>% 
+    filter(albedo !=-99) %>%
+  rename(ID = "system:index", CtDnbr = dnbrCt, countYr = countCA, maxYr=maxCA, medianYr=medianCA, minYr=minCA, sumYr=sumCA) %>%
+  dplyr::select(ID:longitude, dnbr1986:CtDnbr, maxYr, medianYr, minYr, sumYr) %>%
+    filter(countYr <=3) %>%
+  mutate(burned = ifelse(countYr==0, "Unburned",
+                  ifelse(countYr==1, "One",
+                  ifelse(countYr==2, "Two",
+                  ifelse(countYr==3, "Three", "other"))))) %>%
+  mutate(TSF = 2018-maxYr) %>%
+    
+    mutate(TimeSinceFire = ifelse(countYr==0, "0",
+                                     ifelse(TSF==1, "1",
+                                            ifelse(TSF %in% c(2, 3, 4, 5), "2-5",
+                                                   ifelse(TSF %in% c(6, 7, 8, 9, 10), "6-10", 
+                                                          ifelse(TSF %in% c(10:19), "10-19", 
+                                                                 ifelse(TSF %in% c(20:31), "20-31", "Other")))))))  %>% 
+  mutate(TimeSinceFire= ordered(TimeSinceFire, levels = c("0", "1", "2-5", "6-10", "10-19", "20-31", "Other")),
+         burned = ordered(burned, levels = c("Unburned", "One", "Two", "Three", "other"))) %>%
+  mutate_at(c('maxYr', 'medianYr', 'minYr', 'sumYr', 'TSF'), ~replace_na(.,0)) %>%
+    pivot_longer(cols = starts_with("dnbr"), names_to = "dnbrYr", values_to = "dnbr") %>%
+    mutate(dnbrYr = str_remove_all(dnbrYr, "[dnbr]")) 
+  
+)
+```
+
+```{r}
+( akJoined = akAlb %>% 
+    full_join(., akfire, by=c('system:index', 'latitude', 'longitude', 'countAK', "ECO_NAME")) %>% 
+    filter(albedo !=-99) %>%
+  rename(ID = "system:index", CtDnbr = dnbrCt, countYr = countAK, maxYr=maxAK, medianYr=medianAK, minYr=minAK, sumYr=sumAK) %>%
+  dplyr::select(ID:longitude, dnbr1986:CtDnbr, maxYr, medianYr, minYr, sumYr) %>%
+    filter(countYr <=3) %>%
+  mutate(burned = ifelse(countYr==0, "Unburned",
+                  ifelse(countYr==1, "One",
+                  ifelse(countYr==2, "Two",
+                  ifelse(countYr==3, "Three", "other"))))) %>%
+  mutate(TSF = 2018-maxYr) %>%
+    
+    mutate(TimeSinceFire = ifelse(countYr==0, "0",
+                                     ifelse(TSF==1, "1",
+                                            ifelse(TSF %in% c(2, 3, 4, 5), "2-5",
+                                                   ifelse(TSF %in% c(6, 7, 8, 9, 10), "6-10", 
+                                                          ifelse(TSF %in% c(10:19), "10-19", 
+                                                                 ifelse(TSF %in% c(20:31), "20-31", "Other")))))))  %>% 
+  mutate(TimeSinceFire= ordered(TimeSinceFire, levels = c("0", "1", "2-5", "6-10", "10-19", "20-31", "Other")),
+         burned = ordered(burned, levels = c("Unburned", "One", "Two", "Three", "other"))) %>%
+  mutate_at(c('maxYr', 'medianYr', 'minYr', 'sumYr', 'TSF'), ~replace_na(.,0)) %>%
+    pivot_longer(cols = starts_with("dnbr"), names_to = "dnbrYr", values_to = "dnbr") %>%
+    mutate(dnbrYr = str_remove_all(dnbrYr, "[dnbr]")) 
+  
+)
+```
+
+# Filter burned unburned
+
+```{r}
+
+( unburnedCA = caJoined %>% 
+  filter(countYr==0)
+)
+```
+
+```{r}
+
+( unburnedAK = akJoined %>% 
+  filter(countYr==0)
+)
+```
+
+```{r}
+
+( burnedCA = caJoined %>% 
+  filter(countYr != 0) 
+)
+```
+
+
+```{r}
+
+( burnedAK = akJoined %>% 
+  filter(countYr != 0) 
+)
+```
+
+# Add fires and calculate Lag
+## Function to make points
+
+```{r}
+df_to_sf <- function(x){
+  st_as_sf(x, coords = c("longitude","latitude"), crs = 4326, remove = FALSE)
+}
+```
+
+## Drop Lat Lon NA and convert to shapefile 
+
+```{r}
+( burnedCApts = burnedCA %>% 
+    df_to_sf() )
+```
+
+```{r}
+( burnedAKpts = burnedAK %>% 
+    df_to_sf() )
+```
+
+# Reproject
+
+```{r}
+fireProj = st_crs(fires)
+```
+
+```{r}
+( burnedCAptsProj = st_transform(burnedCApts, fireProj) )
+( burnedAKptsProj = st_transform(burnedAKpts, fireProj) )
+```
+
+# join
+
+```{r}
+sf_use_s2(FALSE) # need for error in next code chunk
+```
+```{r}
+joinToPointsCA = st_join(burnedCAptsProj, fires) 
+joinToPointsAK = st_join(burnedAKptsProj, fires) 
+```
+
+```{r}
+joinToPointsCA
+joinToPointsAK
+```
+
+
+
+# Oragnaize joined data
+
+```{r}
+( dfOrgCA = joinToPointsCA %>% 
+  st_drop_geometry() %>%
+  dplyr::select(ID, Year, FireID) %>% 
+  group_by(ID) %>%
+  distinct() %>%
+  arrange(Year) %>%
+  mutate(groupId = row_number()) %>%
+  mutate(fireNum = ifelse(groupId == 1, "fire_1",
+                      ifelse(groupId == 2, "fire_2",
+                          ifelse(groupId == 3, "fire_3", "F")))) %>%
+    dplyr::select(!groupId) %>%
+    pivot_wider(names_from = fireNum, values_from = c(Year, FireID))
+)
+```
+
+```{r}
+( dfOrgAK = joinToPointsAK %>% 
+  st_drop_geometry() %>%
+  dplyr::select(ID, Year, FireID) %>% 
+  group_by(ID) %>%
+  distinct() %>%
+  arrange(Year) %>%
+  mutate(groupId = row_number()) %>%
+  mutate(fireNum = ifelse(groupId == 1, "fire_1",
+                      ifelse(groupId == 2, "fire_2",
+                          ifelse(groupId == 3, "fire_3", "F")))) %>%
+    dplyr::select(!groupId) %>%
+    pivot_wider(names_from = fireNum, values_from = c(Year, FireID))
+)
+```
+
+
+# Rejoin to dataframe
+
+```{r}
+( dfLagCA = burnedCA %>% full_join(., dfOrgCA, by="ID") %>% 
+  mutate(lag1 = Year_fire_2- Year_fire_1) %>%
+  mutate(lag2 = Year_fire_3- Year_fire_2) %>%
+  rename(fireYr1 = Year_fire_1, fireYr2 = Year_fire_2, fireYr3 = Year_fire_3, FireId1 = FireID_fire_1, FireId2 = FireID_fire_2, FireId3 = FireID_fire_3) 
+  
+)
+```
+
+```{r}
+( dfLagAK = burnedCA %>% full_join(., dfOrgAK, by="ID") %>% 
+  mutate(lag1 = Year_fire_2- Year_fire_1) %>%
+  mutate(lag2 = Year_fire_3- Year_fire_2) %>%
+  rename(fireYr1 = Year_fire_1, fireYr2 = Year_fire_2, fireYr3 = Year_fire_3, FireId1 = FireID_fire_1, FireId2 = FireID_fire_2, FireId3 = FireID_fire_3) 
+  
+)
+```
+
+## Split one, two, three times burned
+
+```{r}
+oneCA = dfLagCA %>% filter(burned == "One") %>% mutate(reburnCl = "once")  %>%
+    distinct(ID, .keep_all = TRUE)
+twoCA = dfLagCA %>% filter(burned == "Two")
+threeCA = dfLagCA %>% filter(burned == "Three")
+```
+
+```{r}
+oneAK = dfLagAK %>% filter(burned == "One") %>% mutate(reburnCl = "once")  %>%
+    distinct(ID, .keep_all = TRUE)
+twoAK = dfLagAK %>% filter(burned == "Two")
+threeAK = dfLagAK %>% filter(burned == "Three")
+```
+
+### Check lags
+
+```{r}
+unique(sort(twoCA$lag1))
+unique(sort(threeCA$lag1))
+unique(sort(threeCA$lag2))
+unique(dfLagCA$burned)
+```
+
+```{r}
+unique(sort(twoAK$lag1))
+unique(sort(threeAK$lag1))
+unique(sort(threeAK$lag2))
+unique(dfLagAK$burned)
+```
+
+# Add Reburn Class
+
+```{r}
+( dfLagBurnedCA = dfLagCA %>% 
+    filter(burned %in% c("Two", "Three")) %>%
+    #filter(dnbrYr == Year_fire_1 | dnbrYr == Year_fire_2 | dnbrYr == Year_fire_3 ) %>%
+    dplyr::select(!c(Year_F, FireID_F, CtDnbr)) %>%
+    filter(maxYr <=2017) %>%
+    #filter(lag1 <= 30 | lag2 <= 30) %>%
+  mutate(reburnCl = ifelse( (lag1 %in% 1:30) | (lag2 %in% 1:30), "short",
+                      ifelse( (lag1 > 30) | (lag2 > 30), "medium", "other"))) %>%
+    filter(reburnCl !="medium") %>%
+    distinct(ID, .keep_all = TRUE)
+    
+    
+    )
+```
+ 
+```{r}
+( dfLagBurnedAK = dfLagAK %>% 
+    filter(burned %in% c("Two", "Three")) %>%
+    #filter(dnbrYr == Year_fire_1 | dnbrYr == Year_fire_2 | dnbrYr == Year_fire_3 ) %>%
+    dplyr::select(!c(Year_F, FireID_F, CtDnbr)) %>%
+    filter(maxYr <=2017) %>%
+    #filter(lag1 <= 30 | lag2 <= 30) %>%
+  mutate(reburnCl = ifelse( (lag1 %in% 1:30) | (lag2 %in% 1:30), "short",
+                      ifelse( (lag1 > 30) | (lag2 > 30), "medium", "other"))) %>%
+    filter(reburnCl !="medium") %>%
+    distinct(ID, .keep_all = TRUE)
+    
+    
+    )
+```
+                              
+```{r}
+n_distinct(dfLagBurnedCA$ID)
+unique(dfLagBurnedCA$burned)
+```
+
+# Add Unburned back in
+
+```{r}
+names(dfLagBurnedCA)
+dfLagBurnedCA
+```
+```{r}
+names(unburnedCA)
+```
+
+```{r}
+( unburnedAddColumnsCA = unburnedCA %>% mutate(fireYr1 = 300, 
+                    fireYr2 = 300, 
+                    fireYr3 = 300, 
+                    FireId1 = "x", 
+                    FireId2 = "x",
+                    FireId3 = "x",
+                    lag1 = 300,
+                    lag2 = 300,
+                    reburnCl="unburned") %>%
+  dplyr::select(!c(CtDnbr)) %>%
+    distinct(ID, .keep_all = TRUE)
+  
+)
+```
+
+```{r}
+( unburnedAddColumnsAK = unburnedAK %>% mutate(fireYr1 = 300, 
+                    fireYr2 = 300, 
+                    fireYr3 = 300, 
+                    FireId1 = "x", 
+                    FireId2 = "x",
+                    FireId3 = "x",
+                    lag1 = 300,
+                    lag2 = 300,
+                    reburnCl="unburned") %>%
+  dplyr::select(!c(CtDnbr)) %>%
+    distinct(ID, .keep_all = TRUE)
+  
+)
+```
+
+# Combine burned unburned
+```{r}
+(dfcombineCA = bind_rows(unburnedAddColumnsCA, oneCA, dfLagBurnedCA) %>%
+ mutate(bTSF = paste0(burned,"_",TimeSinceFire),
+        sample = "CAN") %>%
+   dplyr::select(!c(CtDnbr, Year_F, FireID_F ))) 
+```
+
+
+```{r}
+(dfcombineAK = bind_rows(unburnedAddColumnsAK, oneAK, dfLagBurnedAK) %>%
+ mutate(bTSF = paste0(burned,"_",TimeSinceFire),
+        sample="AK") %>%
+   dplyr::select(!c(CtDnbr, Year_F, FireID_F ))) 
+```
+
+# Combine AK and CA
+
+```{r}
+( akCancombined = bind_rows(dfcombineAK, dfcombineCA) %>%
+    distinct(ID, .keep_all = TRUE)
+)
+```
+
+# Write to csv
+```{r}
+write.csv( akCancombined, '../outputs/cleanedSamplePoints/2018AlbedoSampleWesternCanadaAlaska.cvs', row.names=F)
+```
+
+
+
+
+
+

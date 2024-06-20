@@ -1,0 +1,149 @@
+---
+title: "Field Data Reburn for dNBR Extract in EE"
+author: "Anna Talucci"
+date: "2024-05-07"
+output: html_document
+---
+
+
+# Overview
+Organize field data to select for burn_depth and recent burns from 2016 to present. The goal is to pair these sites with SAR data.
+
+Field data provided by Xanthe Walker from FiSL and Legacy Carbon Project. 
+
+# Packages
+```{r}
+library(tidyverse)
+library(sf)
+```
+
+# Data
+```{r}
+lcsites = read_csv("../data/fieldCsv/LC_SITES_11142023.csv")
+lcdata = read_csv("../data/fieldCsv/LC_Data_09052023.csv")
+fd = read_csv("../data/fieldCsv/FiSL_sitedata_BB2023.csv")
+fp = read_csv("../data/fieldCsv/FINAL_PLOTS_01142024.csv")
+```
+
+# Look at data
+```{r}
+lcsites
+lcdata
+
+fp
+```
+
+above ground combustion trees + shrubs + cwd
+below ground 
+
+```{r}
+fp %>% filter(unique_site_id.x==117 | unique_site_id.x ==174)
+```
+
+```{r}
+lcdata
+```
+```{r}
+glimpse(lcdata)
+```
+
+```{r}
+lcdata[is.na(lcdata$Burn_Depth),]
+```
+
+# Assign unique row ideas
+
+```{r}
+( lcdata_id = lcdata %>% mutate(rowId = row_number()) %>% mutate(id = str_c(Researcher,"_",rowId)) )
+```
+```{r}
+lcdata_id$...7[lcdata_id$...7 == "Before 1750"] <- 1750
+```
+
+```{r}
+( lcsites_id = lcsites %>% mutate(rowId = row_number()) %>% mutate(researcher = "walkerLC") %>% mutate(id = str_c(researcher,"_",rowId)) )
+```
+
+```{r}
+( fp_id = fp %>% mutate(rowId = row_number()) %>% mutate(researcher = "walker") %>% mutate(id = str_c(researcher,"_",rowId)) )
+```
+
+
+# Filter Data for reburn
+
+## For final plot data
+Notes: 
+- Projection/Datum NAD83
+- by select only fire from 2016 on we only loos 96 sites
+- burn_depth has 197 NA
+
+
+# Clean
+```{r}
+( fp1 = fp_id %>% 
+    dplyr::select(id, unique_site_id.x, date.x, official_fire_scar, site, latitude, longitude, recent_burn, second_burn, triple_burn) %>%
+    rename(siteId = unique_site_id.x, date=date.x, location = official_fire_scar, burnYr1=recent_burn, burnYr2=second_burn,  burnYr3=triple_burn, lat=latitude, lon=longitude) %>% 
+    mutate(siteId = as.character(siteId),
+           site = as.character(site))
+  )
+```
+
+siteId, date, data, lat, lon, fireYr1, fireYr2, fireYr3
+## For Legacy Carbon (LC) data
+Notes: 
+- Projection/Datum NAD83 
+- by select only fire from 2016 on we only loos 96 sites
+- burn_depth has 58 NA
+
+
+```{r}
+( lc1 = lcdata_id %>% 
+    dplyr::select(id, Researcher, Site_Name, Sampling_Date, StudyArea, Year_of_Burn, `...7`, `...8`, Latitude, Longitude) %>%
+    rename(date=Sampling_Date, siteId = Researcher, site= Site_Name, location = StudyArea, burnYr1=Year_of_Burn, burnYr2=`...7`,  burnYr3=`...8`, lat=Latitude, lon=Longitude) %>%
+  drop_na(lat) %>%
+    mutate(burnYr2 = as.numeric(burnYr2))
+    
+  )
+```
+
+
+```{r}
+( lcsites1 = lcsites_id %>% 
+    dplyr::select(id, unique_site_id, date, official_fire_scar, site, latitude, longitude, recent_burn, second_burn, triple_burn) %>%
+    rename(siteId = unique_site_id, location = official_fire_scar, burnYr1=recent_burn, burnYr2=second_burn,  burnYr3=triple_burn, lat=latitude, lon=longitude) %>% 
+    mutate(siteId = as.character(siteId),
+           site = as.character(site))
+    
+  )
+```
+
+# Combine dataframes
+
+```{r}
+(df = bind_rows(fp1, lc1, lcsites1))
+```
+
+```{r}
+unique(sort(df$burnYr1))
+```
+
+# To point shp
+```{r}
+df_pts = st_as_sf(df, coords = c("lon","lat"), crs = 4269, remove = FALSE)
+```
+
+
+
+# Reproject to WSG 84 
+4326
+```{r}
+pts4326 = st_transform(df_pts, crs=4326)
+```
+
+### write to shapefile
+```{r eval=FALSE, include=FALSE}
+st_write(pts4326, "../outputs/spatialDataCreate/FislLcFieldPoints.shp", driver="ESRI Shapefile")
+```
+
+
+

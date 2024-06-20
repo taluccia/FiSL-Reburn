@@ -1,0 +1,22 @@
+---
+title: "scene band check"
+author: "Anna Talucci"
+date: "2024-04-28"
+output: html_document
+---
+
+```{r}
+library(terra)
+```
+
+```{r}
+image = rast("../data/scene/LC08_065014_20140305.tif")
+```
+
+```{r}
+image
+```
+
+```{r}
+names(image)
+```

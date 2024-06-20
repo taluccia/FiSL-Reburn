@@ -1,0 +1,75 @@
+---
+title: "Combine AK and Canada fire databases"
+author: "Anna Talucci"
+date: "2024-05-17"
+output: html_document
+---
+
+
+# Overview
+Combine Canada and AK fire perimeter databases for joining to EE extracted data and to calculate lag between fires
+
+# Packages
+```{r}
+library(tidyverse)
+library(lubridate)
+library(sf)
+```
+
+
+# Data
+```{r}
+cafires = st_read("../data/boundaries/firePerimeters/CanadaFires1986-2021.shp", "CanadaFires1986-2021")
+```
+
+```{r}
+akfires = st_read("../data/boundaries/firePerimeters/mtbs_perimeter_data/mtbs_perims_DD.shp", "mtbs_perims_DD")
+```
+
+# Looka at data frame
+```{r}
+cafires
+akfires
+```
+
+```{r}
+( ca = cafires %>% dplyr::select(NFIREID, YEAR) %>%
+    mutate(NFIREID = as.character(NFIREID)) %>%
+    rename(ID = NFIREID))
+```
+
+```{r}
+( ak = akfires %>% 
+    filter(BurnBndLat>50) %>% 
+    dplyr::select(Event_ID, Ig_Date) %>%
+    mutate(date = ymd(Ig_Date), 
+         YEAR = year(ymd(date))) %>%
+    dplyr::select(Event_ID, YEAR) %>%
+    rename(ID = Event_ID) %>%
+    filter(YEAR >=1986)
+)
+```
+
+
+## Get Eco Projection
+
+```{r}
+st_crs(ca)
+( caProjection = st_crs(ca)$proj4string )
+```
+
+
+# Reproject
+
+```{r}
+akproj = st_transform(ak, crs = caProjection)
+```
+
+
+# Combine
+
+```{r}
+( allfires = bind_rows(akproj, ca) )
+```
+
+
