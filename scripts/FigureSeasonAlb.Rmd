@@ -49,6 +49,32 @@ seasonRecent %>% filter(albedo <0)
             maxAlb = max(albedo))
 )
 ```
+
+```{r}
+( seasonxburned = seasonMean %>% filter(shldPln=="Shield") %>% filter(TimeSinceFire %in% c(0, 1)) %>%
+ggplot(., aes( x = season, y=meanAlb, color=burned,linetype=burned, group=burned)) +
+  geom_point(size = 2) + 
+  geom_line(linewidth =1) +
+    
+  labs(x="Seasons", y="Albedo") +
+    theme_bw() +
+  theme( legend.position="right", 
+        legend.text=element_text(size=14), 
+        legend.title=element_text(size=16),
+        legend.key = element_blank()) +
+  scale_color_manual(name = "Times Burned", values =c('#01665e', '#5ab4ac', '#d8b365','#8c510a')) + 
+   scale_linetype_manual(values=c("solid", "dotdash", "longdash","twodash")) +
+    theme(axis.title.y = element_text(size = 16, hjust = 0.5, vjust = 1.1),
+          axis.title.x = element_text(size = 16, hjust = 0.5, vjust = 1.1),
+        axis.text.x = element_text(size = 14, color = "black"),
+        axis.text.y = element_text(size = 14, color = "black")) 
+  
+)
+```
+```{r}
+ggsave("../figures/SeasonXTimesBurnedPoster.png", plot = seasonxburned, width = 8, height =6, units = c("in"), dpi=600, bg = "white" )
+```
+
 ```{r}
 (unburn =  seasonMean %>% filter(burned=="Unburned") %>%
 ggplot( aes( x = season, y=meanAlb, color=TimeSinceFire, group=shldPln)) +

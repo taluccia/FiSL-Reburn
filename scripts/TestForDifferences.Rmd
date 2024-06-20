@@ -29,6 +29,12 @@ skdf1k = read_csv("../data/samplePoints/cleanedSamplePoints/skStratifiedSample1k
 ```{r}
 skdf1k
 ```
+# Lag
+
+```{r}
+
+```
+
 # check factors
 
 ```{r}

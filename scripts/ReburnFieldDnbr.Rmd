@@ -17,49 +17,22 @@ library(sf)
 ```
 
 # Data
-```{r}
-file_list <- list.files(path = "../data/fieldDnbr/",
-                pattern = "*.csv", full.names = TRUE)
-```
 
 ```{r}
-file_list
+nbr = read.csv("../data/fieldDnbr/fislLcNBRsample.csv")
 ```
 
-```{r}
-li <- purrr::map(file_list,
-function(file){
-df <- read.csv(file)
 
-current_names <- names(df)
-
-# find what names are missing
-# do mutate(missing_names = NA)
-
-return(df)
-}
-)
-```
-
-```{r}
-dnbr = bind_rows(li) 
-```
 
 # Dataframe
 
 ```{r}
-head(dnbr)
+nbr
 ```
 
-## Number of sites with dNBR above or below 100
 
-n=306 greater than 100
+# Calculate 
 
-n=90 less than 100
-
-```{r eval=FALSE, include=FALSE}
-dnbr %>% filter(dnbr >= 100)
-```
 # Figures
 
 ## Boxplot dNBR for field sites split by most recent burn year

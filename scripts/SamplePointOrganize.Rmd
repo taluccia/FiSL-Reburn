@@ -522,8 +522,9 @@ skdata1k %>% filter(ECO_NAME=="Northern Canadian Shield taiga" )
 write.csv(skdata1k, '../outputs/cleanedSamplePoints/skStratifiedSample1k20180213v2.cvs', row.names=F)
 ```
 
-
-
+```{r}
+skdata1k
+```
 
 
 

@@ -61,35 +61,171 @@ Remove Albedo select from df
 AK Data
 ```{r}
 (dfAK = df %>% filter(fileName!='LandsatSceneMeanAlbSK') %>% filter(ISO_A2=="US") %>%
-   mutate(maxYear = ifelse(fileName == "LandsatScenePixCtReburn2013AK", "2013",
-                    ifelse(fileName == "LandsatScenePixCtReburn2014AK", "2014",
-                    ifelse(fileName == "LandsatScenePixCtReburn2015AK", "2015",
-                    ifelse(fileName == "LandsatScenePixCtReburn2016AK", "2016",
-                    ifelse(fileName == "LandsatScenePixCtReburn2017AK", "2017",
-                    ifelse(fileName == "LandsatScenePixCtReburn2018AK", "2018",
-                    ifelse(fileName == "LandsatScenePixCtReburn2019AK", "2019",
-                    ifelse(ifelse(fileName == "LandsatScenePixCtReburn2020AK", "2020", "2021")))))))))) %>% 
-   dplyr::select(ACQDayL7, ACQDayL8, ISO_A2, PATH, ROW, PR, count, maxYear) %>%
-   filter(count >0)
+   mutate(maxYear = ifelse(fileName == "LandsatScenePixCtReburnAK2013", "2013",
+                    ifelse(fileName == "LandsatScenePixCtReburnAK2014", "2014",
+                    ifelse(fileName == "LandsatScenePixCtReburnAK2015", "2015",
+                    ifelse(fileName == "LandsatScenePixCtReburnAK2016", "2016",
+                    ifelse(fileName == "LandsatScenePixCtReburnAK2017", "2017",
+                    ifelse(fileName == "LandsatScenePixCtReburnAK2018", "2018",
+                    ifelse(fileName == "LandsatScenePixCtReburnAK2019", "2019",
+                    ifelse(fileName == "LandsatScenePixCtReburnAK2020", "2020", "2021"))))))))) %>% 
+    mutate(albStartYr = ifelse(fileName == "LandsatScenePixCtReburnAK2013", "2014",
+                    ifelse(fileName == "LandsatScenePixCtReburnAK2014", "2015",
+                    ifelse(fileName == "LandsatScenePixCtReburnAK2015", "2016",
+                    ifelse(fileName == "LandsatScenePixCtReburnAK2016", "2017",
+                    ifelse(fileName == "LandsatScenePixCtReburnAK2017", "2018",
+                    ifelse(fileName == "LandsatScenePixCtReburnAK2018", "2019",
+                    ifelse(fileName == "LandsatScenePixCtReburnAK2019", "2020",
+                    ifelse(fileName == "LandsatScenePixCtReburnAK2020", "2021", "2022"))))))))) %>% 
+   dplyr::select(ACQDayL7, ACQDayL8, ISO_A2, PATH, ROW, PR, count, maxYear, albStartYr) %>%
+   filter(count >0) %>%
+   #filter(albStartYr !="2018") %>% 
+   filter(count > 500) # remove 9
+   
 )
 ```
+
+```{r}
+n_distinct(dfAK$PR)
+min(dfAK$count)
+max(dfAK$count)
+mean(dfAK$count)
+median(dfAK$count)
+```
+
+## summarize PR and years
+```{r}
+dfAK %>% group_by(maxYear, albStartYr, PR) %>%
+  summarize(meanCt = mean(count))
+```
+
+## Unique Row Path with years of interest as list
+
+```{r}
+( akPRYr = dfAK %>%
+      group_by(PR, PATH, ROW) %>% 
+      summarise(maxYear = toString(unique(maxYear))) 
+)
+```
+## Generate the additonal ROW PATH needed to have for Albedo Processing
+
+```{r}
+( additionalRows = akPRYr %>% 
+  group_by(PR) %>%
+  mutate(newROWplus = (ROW+1), 
+         newROWminus = (ROW-1)) %>%
+  pivot_longer(cols = starts_with("new"),
+    names_to = "newRow",
+    values_to = "ROWNew",
+    values_drop_na = TRUE
+  ) %>%
+  mutate(ROW = paste0("0", ROWNew),
+         PRNew = paste0(PATH, ROW)) %>%
+    ungroup() %>%
+  dplyr::select(PRNew, PATH, ROWNew, maxYear) %>%
+    rename(PR=PRNew, ROW= ROWNew) %>%
+    mutate(PR = as.integer(PR))
+)
+```
+
+### Bind rows additional plus original
+```{r}
+(ak = bind_rows(akPRYr, additionalRows) %>%
+   distinct() %>%
+  arrange(PR) %>%
+  group_by(PR, PATH, ROW) %>% 
+      summarise(maxYear = toString(unique(maxYear))) %>%
+  dplyr::select(PR, PATH, ROW, maxYear)%>%
+    mutate(location = "AK")
+                )
+```
+
+
+
+
+# Processing for Canada
 
 ```{r}
 (dfCA = df %>% filter(fileName!='LandsatSceneMeanAlbSK') %>% filter(ISO_A2=="CA") %>%
-   mutate(maxYear = ifelse(fileName == "LandsatScenePixCtReburn2013CA", "2013",
-                    ifelse(fileName == "LandsatScenePixCtReburn2014CA", "2014",
-                    ifelse(fileName == "LandsatScenePixCtReburn2015CA", "2015",
-                    ifelse(fileName == "LandsatScenePixCtReburn2016CA", "2016",
-                    ifelse(fileName == "LandsatScenePixCtReburn2017CA", "2017",
-                    ifelse(fileName == "LandsatScenePixCtReburn2018CA", "2018",
-                    ifelse(fileName == "LandsatScenePixCtReburn2019CA", "2019",
-                    ifelse(ifelse(fileName == "LandsatScenePixCtReburn2020CA", "2020", "2021")))))))))) %>% 
-   dplyr::select(ACQDayL7, ACQDayL8, ISO_A2, PATH, ROW, PR, count, maxYear) %>%
+   mutate(maxYear = ifelse(fileName == "LandsatScenePixCtReburnCA2013", "2013",
+                    ifelse(fileName == "LandsatScenePixCtReburnCA2014", "2014",
+                    ifelse(fileName == "LandsatScenePixCtReburnCA2015", "2015",
+                    ifelse(fileName == "LandsatScenePixCtReburnCA2016", "2016",
+                    ifelse(fileName == "LandsatScenePixCtReburnCA2017", "2017",
+                    ifelse(fileName == "LandsatScenePixCtReburnCA2018", "2018",
+                    ifelse(fileName == "LandsatScenePixCtReburnCA2019", "2019",
+                    ifelse(fileName == "LandsatScenePixCtReburnCA2020", "2020", "2021"))))))))) %>% 
+   mutate(albStartYr = ifelse(fileName == "LandsatScenePixCtReburnCA2013", "2014",
+                    ifelse(fileName == "LandsatScenePixCtReburnCA2014", "2015",
+                    ifelse(fileName == "LandsatScenePixCtReburnCA2015", "2016",
+                    ifelse(fileName == "LandsatScenePixCtReburnCA2016", "2017",
+                    ifelse(fileName == "LandsatScenePixCtReburnCA2017", "2018",
+                    ifelse(fileName == "LandsatScenePixCtReburnCA2018", "2019",
+                    ifelse(fileName == "LandsatScenePixCtReburnCA2019", "2020",
+                    ifelse(fileName == "LandsatScenePixCtReburnCA2020", "2021", "2022"))))))))) %>% 
+   dplyr::select(ACQDayL7, ACQDayL8, ISO_A2, PATH, ROW, PR, count, maxYear, albStartYr) %>%
    filter(count >0) %>%
-   filter(!PR %in% sk_target) 
+   filter(!PR %in% sk_target) %>%
+   #filter(albStartYr !="2018") %>% 
+   filter(count > 500) # remove 83
 )
 ```
 
-```{r}
 
+
+```{r}
+n_distinct(dfCA$PR)
+min(dfCA$count)
+max(dfCA$count)
+mean(dfCA$count)
+median(dfCA$count)
+```
+
+```{r}
+( caPRYr = dfCA %>%
+      group_by(PR, PATH, ROW) %>% 
+      summarise(maxYear = toString(unique(maxYear))) 
+)
+```
+
+
+## Generate the additonal ROW PATH needed to have for Albedo Processing
+
+```{r}
+( additionalRows = caPRYr %>% 
+  group_by(PR) %>%
+  mutate(newROWplus = (ROW+1), 
+         newROWminus = (ROW-1)) %>%
+  pivot_longer(cols = starts_with("new"),
+    names_to = "newRow",
+    values_to = "ROWNew",
+    values_drop_na = TRUE
+  ) %>%
+  mutate(ROW = paste0("0", ROWNew),
+         PRNew = paste0(PATH, ROW)) %>%
+    ungroup() %>%
+  dplyr::select(PRNew, PATH, ROWNew, maxYear) %>%
+    rename(PR=PRNew, ROW= ROWNew) %>%
+    mutate(PR = as.integer(PR))
+)
+```
+
+### Bind rows additional plus original
+```{r}
+(ca = bind_rows(caPRYr, additionalRows) %>%
+   distinct() %>%
+  arrange(PR) %>%
+  group_by(PR, PATH, ROW) %>% 
+      summarise(maxYear = toString(unique(maxYear))) %>%
+  dplyr::select(PR, PATH, ROW, maxYear)%>%
+    mutate(location = "CA")
+                )
+```
+
+
+# Save as csv
+
+```{r}
+write.csv(ak, '../outputs/landsatScenes/LandsatCol1ScenesAK.csv', row.names=F)
+write.csv(ca, '../outputs/landsatScenes/LandsatCol1ScenesCA.csv', row.names=F)
 ```

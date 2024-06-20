@@ -38,6 +38,11 @@ scenes = st_read("../data/boundaries/WRS2_descending_0/WRS2_descending.shp", "WR
 wrld = st_read("../data/boundaries/world/WB_countries_Admin0_10m.shp", "WB_countries_Admin0_10m")
 ```
 
+## Resolve
+```{r}
+resolve = st_read("../data/boundaries/RESOLVE_Ecoregions_and_Biomes/Biomes_and_Ecoregions_2017.shp", "Biomes_and_Ecoregions_2017")
+```
+
 
     
 # Data Structure
@@ -46,6 +51,7 @@ wrld = st_read("../data/boundaries/world/WB_countries_Admin0_10m.shp", "WB_count
 glimpse(fed)
 glimpse(scenes)
 glimpse(wrld)
+glimpse(resolve)
 ```
 
 ```{r}
@@ -77,29 +83,44 @@ unique(akFed$ADMIN1)
 unique(akFed$ADMIN1)
 ```
 
+## Resolve
+```{r}
+( boreal = resolve %>% 
+    filter(REALM %in% c("Nearctic")) %>% 
+    dplyr::select(OBJECTID, ECO_NAME, BIOME_NUM, BIOME_NAME, REALM, ECO_ID, geometry) %>% 
+    filter(BIOME_NUM %in% c(6)) 
+)
+```
 
 # Instersection of Scenes with North America
 
 ```{r}
-( join = st_join(scenes, northAm) )
+( join1 = st_join(scenes, northAm) )
 ```
 
 ```{r}
-( scenesNA = join %>% filter(FORMAL_EN%in% c("United States of America", "Canada")) %>% dplyr::select(AREA:REGION_WB, Shape_Leng:geometry) %>% filter(ROW<=30) %>% filter(ROW>=10))
+( scenesNA = join1 %>% filter(FORMAL_EN%in% c("United States of America", "Canada")) %>% dplyr::select(AREA:REGION_WB, Shape_Leng:geometry) %>% filter(ROW<=30) %>% filter(ROW>=10))
 ```
 
-
-# Save shapefile
-```{r eval=FALSE, include=FALSE}
-st_write(scenesNA, "../outputs/boundaries/selectLandsatScenes.shp", driver="ESRI Shapefile")
+```{r}
+( join2 = st_join(scenesNA, boreal) )
 ```
+
+```{r}
+(borealNA = join2 %>% drop_na(BIOME_NUM))
+```
+
+# Check
+
 ## LAndsat scene info
 ```{r}
-unique(scenesNA$ROW)
+n_distinct(scenesNA$PR)
+n_distinct(borealNA$PR)
 ```
 
-# Map check 
+## Map check 
 
+### North America
 ```{r}
 ggplot() +
      geom_sf(data = northAm, fill = "#F9F6EE", colour="#A9AB9D") +
@@ -109,8 +130,19 @@ ggplot() +
 ```
 
 
-# Overlay Raster with Fed land
-
+### Boreal North America
 ```{r}
-
+ggplot() +
+     geom_sf(data = northAm, fill = "#F9F6EE", colour="#A9AB9D") +
+  geom_sf(data = borealNA, fill = NA, color="black") +
+  coord_sf() +
+  theme_bw()
 ```
+
+# Save shapefile
+```{r eval=FALSE, include=FALSE}
+st_write(borealNA, "../outputs/boundaries/landsatScenes/selectLandsatScenes.shp", driver="ESRI Shapefile")
+```
+
+
+
