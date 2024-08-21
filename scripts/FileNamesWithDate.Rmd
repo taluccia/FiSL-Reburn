@@ -1,0 +1,32 @@
+---
+title: "File names with date column"
+author: "Anna Talucci"
+date: "2024-06-20"
+output: html_document
+---
+
+```{r}
+
+library(tidyverse)
+```
+
+```{r}
+data = read_csv('../outputs/landsatScenes/LandsatCol1DlFileNamesCanEast.csv')
+```
+```{r}
+data
+```
+
+
+
+
+```{r}
+( sceneDate = data %>% 
+    separate(col=name, into=c("LC" , "PR", "YYYYMMDD"), sep="_", fill="right", remove = FALSE,convert = TRUE)  %>%
+    mutate(date = lubridate::ymd(YYYYMMDD)))
+   
+```
+
+```{r}
+write.csv(sceneDate, '../outputs/landsatScenes/L8C1FileDateCanEast.csv', row.names=F)
+```

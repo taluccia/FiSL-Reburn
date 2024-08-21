@@ -1,0 +1,69 @@
+---
+title: "EE: LandsatSceneDownload"
+author: "Anna Talucci"
+date: "2024-08-18"
+output: html_document
+---
+
+
+```{js}
+/* Landsat Scene download
+
+*/
+
+var startYr = 2013
+var endYr = 2021 //December 31, 2021 end of processing for collection 1
+var Path = 7
+var Row = 21
+
+
+var batch = require('users/fitoprincipe/geetools:batch')
+
+var landsat8 = ee.ImageCollection('LANDSAT/LC08/C01/T1_SR')
+
+var sr = landsat8.filter(ee.Filter.calendarRange(12, 5, 'month'))//.filterDate(startYr+'-10-01', endYr+'-05-15')
+  .filter(ee.Filter.calendarRange(startYr, endYr, 'year'))
+  .filter(ee.Filter.or(
+    ee.Filter.and(ee.Filter.eq('WRS_PATH', Path),         
+                  ee.Filter.eq('WRS_ROW', Row))))
+                  
+print(sr)
+Map.addLayer(sr.first())
+
+var projection = sr.first().projection()
+print("proj", projection)
+
+// Extract and print the CRS code, which includes the UTM zone
+var crsCode = projection.crs();
+print('CRS Code:', crsCode);
+
+var tileName = sr.first().get('LANDSAT_ID');
+print('Tile Name:', tileName)
+
+
+batch.Download.ImageCollection.toDrive(sr, 'Landsat8Collection1ScenesCANeast', 
+                {scale: 30, 
+                 crs: projection.wkt().getInfo(),
+                 type: 'float'})
+                 
+// Export single imagery to Drive
+// Export.image.toDrive({
+//   image: sr2014.first(),
+//   description: ""+tileName,
+//   folder: 'EarthEngine',
+//   scale: 30,
+//   crs: crsCode,
+//   maxPixels: 1e13,
+// });
+
+
+
+
+
+
+
+
+
+
+```
+

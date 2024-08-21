@@ -1,0 +1,119 @@
+---
+title: "EE: Albedo2018NABoreal "
+author: "Anna Talucci"
+date: "2024-08-18"
+output: html_document
+---
+
+
+```{js}
+/* Produce Albedo image postfire spring for SK
+scale albedo by dividing by 10,000
+*/
+
+Map.setOptions('SATELLITE');
+// Map.addLayer(image2)
+// print(image2)
+Map.setCenter(-105.92, 56.35, 8)
+
+
+
+//-----------------------
+// Albedo & quality data 
+var alb = ee.ImageCollection('projects/talucci-workspace/assets/NABorealAlbedo2018')
+var alb_last = alb.sort('system:time_start', false);
+print("Albedo first image", alb.first())
+print("Albedo last image", alb_last.first())
+var first = alb.select('b1')
+var last = alb_last.first().select('b1')
+
+
+
+
+// Select and Rename bands
+var rename_bands = function(image){
+  return image.select('b1', 'b2').rename('albedo', 'qa');
+};
+
+//rename quality flag band for landsat
+// var rename_qual = function(image){
+//   return image.select('b2').rename('qa');
+// };
+
+var alb = alb.map(rename_bands);
+// var qual = qual.map(rename_qual);
+print(alb.limit(3))
+// Define an inner join to combine the bands
+var innerJoin = ee.Join.inner();
+
+// // Specify an equals filter for image timestamps.
+// var filterTimeEq = ee.Filter.equals({
+//   leftField: 'system:index'.slice(1,69),
+//   rightField: 'system:index'.slice(1,69)
+// });
+
+var filterTimeEq = ee.Filter.equals({
+  leftField: 'system:id',
+  rightField: 'system:id'
+});
+
+var repls = function(feature){
+  var sub =  ee.String(feature.get('system:index')).slice(0,37);
+  return(feature.set('system:id', sub))
+};
+
+alb = alb.map(repls)
+// qual = qual.map(repls)
+
+
+// // Apply the join.
+// var innerJoinedlandsat = innerJoin.apply(alb, filterTimeEq);
+//function to unstack primary and secondary images
+// var cat_images = function(feature){
+//   return ee.Image.cat(feature.get('primary'), feature.get('secondary'));
+// };
+
+// // print(innerJoinedlandsat.limit(10))
+// var final = ee.ImageCollection(alb.map(cat_images));
+
+//select a quality flag of 0 which is good pixels
+var mask_land_good = function(image){
+  return image.updateMask(image.select('qa').eq(0)).set('system:time_start', image.get('system:time_start'));
+};
+
+//final join
+var joined_landsat = alb.map(mask_land_good).select('albedo');
+
+print('joined landsat', joined_landsat.first())
+// Map.addLayer(joined_landsat.first(), {}, 'joined landsat')
+
+
+
+
+var palette = ['f0f9e8','bae4bc','7bccc4','43a2ca','0868ac']
+var vis = {min: 0, max: 1, palette: palette};
+// Post fire albedo
+// var postSummer1 = joined_landsat.filterDate(post+'-06-01', post+'-08-31').filterBounds(geometry).mean();
+var Spring2018 = joined_landsat.filterDate('2018-01-01', '2018-04-15').select('albedo').mean();
+// var Spring2017 = joined_landsat.filterDate('2017-01-01', '2017-04-15').mean().divide(10000);
+// var Spring2016 = joined_landsat.filterDate('2016-01-01', '2016-04-15').mean().divide(10000);
+// var Spring2015 = joined_landsat.filterDate('2015-01-01', '2015-04-15').mean().divide(10000);
+// var Spring2014 = joined_landsat.filterDate('2014-01-01', '2014-04-15').mean().divide(10000);
+// var Spring2013 = joined_landsat.filterDate('2013-01-01', '2013-04-15').mean().divide(10000);
+
+
+// Map Layers
+Map.addLayer(first, { palette: ['FCFDBF',  'EE605E',  '711F81']}, 'first')
+Map.addLayer(last, { palette: ['FCFDBF',  'EE605E',  '711F81']}, 'last')
+
+
+
+Map.addLayer(Spring2018, {min:0, max:1, palette: ['FCFDBF',  'EE605E',  '711F81']}, 'spring 2018')
+
+
+
+
+
+
+```
+

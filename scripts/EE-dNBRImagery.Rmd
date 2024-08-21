@@ -1,0 +1,171 @@
+---
+title: "EE:dNBRImagery"
+author: "Anna Talucci"
+date: "2024-08-18"
+output: html_document
+---
+
+
+```{js}
+/* FiSL dNBR Imagery
+Study Area NE Siberia (Ecozones NST and CKMT)
+    
+    Script by Anna Talucci  
+    August 2021 (Adapted from ERL scripts)
+    For updates or questions on this code, please can contact:  
+        Anna Talucci actalucci@gmail.com
+
+    Notes: 
+
+Produces a composite dNBR image for 2020 fire season NE Siberia using extended assessment.
+*/
+
+
+
+
+// Center Map
+Map.setCenter(-105.93, 57.84, 4);
+
+// Subset to Sample
+var pre = 2020
+var year = 2021
+var post = 2022
+
+// ECOZONE 
+// ECO REGIONS
+var ecoB = ee.FeatureCollection("RESOLVE/ECOREGIONS/2017")
+// Map.addLayer(ecoB)
+// "Ogilvie-MacKenzie alpine tundra",
+var borealList = ["Interior Alaska-Yukon lowland taiga", "Northwest Territories taiga",  
+"Watson Highlands taiga", "Northern Cordillera forests", "Muskwa-Slave Lake taiga",
+"Northern Canadian Shield taiga", " Midwest Canadian Shield forests", "Mid-Canada Boreal Plains forests",
+"Southern Hudson Bay taiga", "Central Canadian Shield forests", "Eastern Canadian Shield taiga", 
+"Eastern Canadian forests", "Ogilvie-MacKenzie alpine tundra", 'Interior Yukon-Alaska alpine tundra', 'Midwest Canadian Shield forests']
+var ecoBoreal = ecoB.filter(ee.Filter.inList("ECO_NAME", borealList))
+
+
+
+var aoi = ecoBoreal
+
+var fires = ee.FeatureCollection('projects/ee-fisl-reburn/assets/CanadaFires4326Simp1986-2021')
+// var fires = ee.FeatureCollection('projects/ee-fisl-reburn/assets/AK4326Fires1986-2021').filter(ee.Filter.inList('NA_L2NAME', ecoList)).filter(ee.Filter.eq("Year", year))
+print(fires.limit(5))
+
+// Get Landsat surface reflectance collection 2 for OLI, ETM+ and TM sensors.
+var landsat8 = ee.ImageCollection('LANDSAT/LC08/C02/T1_L2'),
+    landsat7 = ee.ImageCollection('LANDSAT/LE07/C02/T1_L2'),
+    landsat5 = ee.ImageCollection('LANDSAT/LT05/C02/T1_L2');
+
+print('ls8', landsat8.first())
+
+// Define bands 
+
+var l7_bands = ['SR_B1','SR_B2','SR_B3','SR_B4','SR_B5','SR_B7', 'QA_PIXEL']; // define landsat 7 bands, these also match landsat 5 bands
+var l8_bands = ['SR_B2','SR_B3','SR_B4','SR_B5','SR_B6','SR_B7', 'QA_PIXEL']; // define landsat 8 bands
+var rename_bands = ['blue','green','red','nir','swir1','swir2','pixel_qa']; //define how we will rename bands so that we can have the same bands across all landsat data - 5, 7, and 8
+
+// Select and Rename bands
+var l5 = landsat5.select(l7_bands,rename_bands).filterDate(pre+'-05-01', post+'-09-01').filterBounds(aoi); 
+var l7 = landsat7.select(l7_bands,rename_bands).filterDate(pre+'-05-01', post+'-09-01').filterBounds(aoi); 
+var l8 = landsat8.select(l8_bands,rename_bands).filterDate(pre+'-05-01', post+'-09-01').filterBounds(aoi); 
+
+print('l7',l7.limit(5))
+
+// Merge the collections.
+var ls_full = l5
+  .merge(l7)
+  .merge(l8);
+
+print('ls full1', ls_full.first()) 
+
+
+// Define function to mask out clouds and cloud shadows.
+function fmask(img) {
+      var qa = img.select('pixel_qa');  // select out the fmask band
+      var mask = qa.bitwiseAnd(8).eq(0).and(                                 // include shadow
+                qa.bitwiseAnd(16).eq(0)).and(                               // include snow
+                qa.bitwiseAnd(32).eq(0)); 
+  return img.updateMask(mask);
+}
+
+
+ls_full = ls_full.map(fmask)
+
+
+print('ls full2', ls_full.first()) 
+
+
+
+
+function addNBR(image) { //here we are creating a function; this line defines the funtion, and the next three lines will define what the function does
+  var nbr = image.expression( //create variable nbr that is a mathematical expression
+'(NIR - SWIR2) / (NIR + SWIR2)*1000', // Take the nir band and subtract the swir2 band and divide that by the addition of the nir band and swir2 band; then multiple by 1000 to scale 
+{'NIR': image.select('nir'), //select the nir band to be used in the expression
+'SWIR2': image.select('swir2')}); //select the nir band to be used in the expression
+  var img_nbr = image.addBands(nbr); // nowadd the nbr band to the image 
+  return img_nbr; //finally it returns the variable we created in the line above
+}// end of the function
+
+
+
+
+
+ls_full = ls_full.map(addNBR)
+
+print('ls full', ls_full.first()) 
+
+var landsat_full_bands = ['blue','green','red','nir','swir1','swir2','pixel_qa','nir_1'];
+var rename_bands2 = ['blue','green','red','nir','swir1','swir2','pixel_qa','nbr'];
+var lsFull = ls_full.select(landsat_full_bands,rename_bands2); 
+
+print('lsFull', lsFull.first())
+
+// Pre and post fire
+var prefire = ee.Image(lsFull.filterDate(pre+'-05-01', pre+'-08-30').filterBounds(aoi).sort('CLOUD_COVER_LAND').median())
+var postfire = ee.Image(lsFull.filterDate(post+'-05-01', post+'-08-30').filterBounds(aoi).sort('CLOUD_COVER_LAND').median());
+
+print('prefire', prefire)
+print('postfire', postfire)
+// prefire = compute_indices(prefire);
+// Map.addLayer(prefire)
+// print('prefire', prefire.bandNames())
+
+// Calculate pre-post-fire difference 
+var preNBR = prefire.select('nbr').rename('preNBR');
+var postNBR = postfire.select('nbr').rename('postNBR');
+var dnbr = prefire.subtract(postfire).select('nbr').rename('dnbr');
+
+
+// var mask = ee.Image.constant(1).clip(fires.geometry()).mask().not()
+// var unmask = ee.Image.constant(1).clip(fires.geometry()).unmask()
+dnbr = dnbr.clip(aoi)
+var imgMask = dnbr.gt(100);
+var dnbrBurned = dnbr.mask(imgMask.unmask());
+
+// VISUALIZATION PARAMETERS 
+var viz = {min: -0.1, max: 1, palette: ['00FFFF', '0000FF']};
+var dnbrViz = {min: -100, max: 1500, palette: ['7CFC00', 'FFFF00', 'FFA500', 'FF0000']};
+var vizParams = {bands: ['B5', 'B4', 'B3'], min: 0, max: 0.5, gamma: [0.95, 1.1, 1] };
+
+// MAP LAYERS
+Map.addLayer(ecoBoreal, {}, 'ecoregions')
+// Map.addLayer(ecoT, {}, 'taiga')
+//Map.addLayer(ecoBoreal, {}, 'boreal')
+Map.addLayer(dnbr, dnbrViz, 'dnbr')
+Map.addLayer(fires, {}, 'fires')
+
+
+//------------------------- EXPORT TO ASSET --------------------------------------//
+// Export the image to an Earth Engine asset.
+Export.image.toAsset({
+  image: dnbrBurned.select("dnbr"),
+  description:'dnbr'+year,
+  assetId:'dnbr'+year,
+  scale: 30,
+  crs: 'EPSG: 4326',
+  region: aoi,
+  maxPixels: 1e13
+});
+
+```
+

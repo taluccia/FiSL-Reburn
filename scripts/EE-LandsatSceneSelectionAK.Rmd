@@ -1,0 +1,171 @@
+---
+title: "EE:LandsatSceneSelectionAK"
+author: "Anna Talucci"
+date: "2024-08-18"
+output: html_document
+---
+
+
+```{js}
+/* Landsat scene selection for Alaska
+
+Mask pixels on DOD lands
+Use only reburn pixels (2 and 3 times burned for selection)
+
+Count pixels by Max year using landsat scene polygons
+
+*/
+var yr = 2021
+var year = "2021"
+
+Map.setOptions('SATELLITE');
+
+// Landsat Scenes
+var scenes = ee.FeatureCollection('projects/ee-fisl-reburn/assets/selectLandsatScenes').filter(ee.Filter.eq("ISO_A2", "US"))
+
+// Seelct Federal Lands non DOD locations
+FedLands = FedLands.filter(ee.Filter.neq('ADMIN1', "DOD"))
+
+// Reburn Raster
+var img = ee.Image('projects/ee-fisl-reburn/assets/ImageForSampling')
+print("img", img)
+
+var imgAK2013 = img.updateMask(img.select('maxAK').gte(2013)).updateMask(img.select('maxAK').lte(2021)).updateMask(img.select('countAK').gte(1))
+print("imgAK2013", imgAK2013)
+
+var imgAK2013rb = img.updateMask(img.select('maxAK').gte(2013)).updateMask(img.select('maxAK').lte(2021)).updateMask(img.select('countAK').gte(2)).updateMask(img.select('countAK').lte(3)).clip(FedLands)
+print('imgAK2013rb', imgAK2013rb)
+
+var maxCtImg = imgAK2013rb.select("maxAK").updateMask(imgAK2013rb.select('maxAK').eq(yr))
+print("maxCtImg",maxCtImg)
+
+var pixCt = maxCtImg.reduceRegions({
+    collection: scenes,
+    reducer: ee.Reducer.count(),
+    scale: 30,
+    crs: 'EPSG: 4326',
+    // tileScale: 16,
+
+});
+
+// Export reduce region to csv
+Export.table.toDrive({
+  collection: pixCt,
+  description:'LandsatScenePixCtReburnAK'+year,
+  folder: 'EarthEngine',
+  fileFormat:'CSV'});
+
+
+
+// Palettes for mapping
+var palettect = ['FCFDBF',  'EE605E',  '711F81']
+var visct = {min: 1, max: 3, palette: palettect};
+
+var palettemax = ['#a6cee3','#1f78b4','#b2df8a','#33a02c','#fb9a99','#e31a1c','#fdbf6f','#ff7f00','#cab2d6']
+var vismax = {min: 2013, max: 2021, palette: palettemax};
+
+
+// Map layers
+Map.addLayer(FedLands, {}, "non DOD land")
+Map.addLayer(scenes, {}, "landsat scenes")
+// Map.addLayer(imgAK2013.select('countAK'), visct, 'times burned AK 2013-2022')
+// Map.addLayer(imgAK2013rb.select('maxAK'), vismax, 'times burned AK reburn 2013-2022')
+
+Map.addLayer(maxCtImg.select('maxAK'), vismax, 'times burned AK reburn 2013-2022')
+
+
+
+
+
+
+// Legend and symbols
+var fireSym = {color:'gray', fillColor:'FFFFFF30'}
+// Map.addLayer(skPts, {}, 'sk pts')
+var nSteps = 3
+// Creates a color bar thumbnail image for use in legend from the given color palette
+function makeColorBarParams(palette) {
+  return {
+    bbox: [0, 0, nSteps, 0.1],
+    dimensions: '100x10',
+    format: 'png',
+    min: 0,
+    max: nSteps,
+    palette: palette,
+  };
+}
+
+// Create the colour bar for the legend
+var colorBar = ui.Thumbnail({
+  image: ee.Image.pixelLonLat().select(0).int(),
+  params: makeColorBarParams(visct.palette),
+  style: {stretch: 'horizontal', margin: '0px 8px', maxHeight: '24px'},
+});
+
+// Create a panel with three numbers for the legend
+var legendLabels = ui.Panel({
+  widgets: [
+    ui.Label(visct.min, {margin: '4px 8px'}),
+    ui.Label(
+        ((visct.max-visct.min) / 2+visct.min),
+        {margin: '4px 8px', textAlign: 'center', stretch: 'horizontal'}),
+    ui.Label(visct.max, {margin: '4px 8px'})
+  ],
+  layout: ui.Panel.Layout.flow('horizontal')
+});
+
+// Legend title
+var legendTitle = ui.Label({
+  value: 'Times burned',
+  style: {fontWeight: 'bold'}
+});
+
+// Add the legendPanel to the map
+var legendPanel = ui.Panel([legendTitle, colorBar, legendLabels]);
+Map.add(legendPanel);
+
+////////////////////////////////  
+// Creates a color bar thumbnail image for use in legend from the given color palette
+function makeColorBarParamsmax(palettemax) {
+  return {
+    bbox: [0, 0, 9, 0.1],
+    dimensions: '100x10',
+    format: 'png',
+    min: 0,
+    max: 9,
+    palette: palettemax,
+  };
+}
+
+// Create the colour bar for the legend
+var colorBarmax = ui.Thumbnail({
+  image: ee.Image.pixelLonLat().select(0).int(),
+  params: makeColorBarParamsmax(vismax.palette),
+  style: {stretch: 'horizontal', margin: '0px 8px', maxHeight: '24px'},
+});
+
+// Create a panel with three numbers for the legend
+var legendLabelsmax = ui.Panel({
+  widgets: [
+    ui.Label(vismax.min, {margin: '4px 8px'}),
+    ui.Label(
+        ((vismax.max-vismax.min) / 2+visct.min),
+        {margin: '4px 8px', textAlign: 'center', stretch: 'horizontal'}),
+    ui.Label(vismax.max, {margin: '4px 8px'})
+  ],
+  layout: ui.Panel.Layout.flow('horizontal')
+});
+
+// Legend title
+var legendTitlemax = ui.Label({
+  value: 'Reburn Year',
+  style: {fontWeight: 'bold'}
+});
+
+// Add the legendPanel to the map
+var legendPanel = ui.Panel([legendTitlemax, colorBarmax, legendLabelsmax]);
+Map.add(legendPanel);
+
+
+//////// THE END///////
+```
+

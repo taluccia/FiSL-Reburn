@@ -1,0 +1,192 @@
+---
+title: "Landsat Scenes Match dates"
+author: "Anna Talucci"
+date: "2024-08-08"
+output: html_document
+---
+
+```{r}
+library(tidyverse)
+```
+
+```{r}
+canEastDl = read_csv('../outputs/landsatScenes/L8C1FileDateCanEast.csv')
+canWestDl = read_csv('../outputs/landsatScenes/L8C1FileDateCanWest.csv')
+akDl = read_csv('../outputs/landsatScenes/L8C1FileDateAK.csv')
+
+
+```
+
+## Scenes of interest 
+
+```{r}
+akScenes = read_csv('../outputs/landsatScenes/LC1ScenesOfInterestAK.csv')
+canScenes = read_csv('../outputs/landsatScenes/LC1ScenesOfInterestCan.csv')
+```
+
+
+# Data Frames
+```{r}
+akScenes1 = akScenes %>% mutate(location = "AK",
+                    row_above = ROW + 1,
+                    row_below = ROW -1)
+canScenes1 = canScenes %>% mutate(location = "CAN",
+                    row_above = ROW + 1,
+                    row_below = ROW -1)
+```
+
+```{r}
+(scenes = bind_rows(akScenes1, canScenes1) )
+```
+
+```{r}
+canEastDl1 = canEastDl %>% mutate(eeFolder = "canEast") %>% extract(., PR, into = c("PATH", "ROW"), "(.{2})(.{3})", remove=FALSE)
+canWestDl1 = canWestDl %>% mutate(eeFolder = "canWest") %>% extract(., PR, into = c("PATH", "ROW"), "(.{2})(.{3})", remove=FALSE)
+akDl1 = akDl %>% mutate(eeFolder = "ak") %>% extract(., PR, into = c("PATH", "ROW"), "(.{2})(.{3})", remove=FALSE)
+```
+
+
+
+```{r}
+unique(canEastDl1$PATH)
+unique(canEastDl1$ROW)
+unique(canEastDl1$PR)
+```
+```{r}
+canEastDl1 %>% filter(is.na(PATH))
+```
+```{r}
+unique(canWestDl1$PATH)
+unique(canWestDl1$ROW)
+unique(canWestDl1$PR)
+```
+
+```{r}
+unique(akDl1$PATH)
+unique(akDl1$ROW)
+unique(akDl1$PR)
+```
+
+```{r}
+(combine_dl = bind_rows(akDl1, canWestDl1, canEastDl1) )
+```
+
+# Find matching dates
+
+```{r}
+( combine_dl1 = combine_dl %>% mutate(PATH = as.numeric(PATH)) %>% mutate(ROW = as.numeric(ROW)) )
+```
+
+```{r}
+scenes1 = scenes %>% mutate(row_interest = ROW)
+```
+**DON'T NEED THIS SECTION**
+```{r}
+cat(paste0(sprintf("'%s'", sort(unique(scenes1$row_interest))), collapse = ", "))
+```
+
+```{r}
+cat(paste0(sprintf("'%s'", sort(unique(scenes1$row_below))), collapse = ", "))
+```
+
+```{r}
+cat(paste0(sprintf("'%s'", sort(unique(scenes1$row_above))), collapse = ", "))
+```
+
+# Filter interest, above, below
+**DON'T NEED THIS SECTION**
+```{r interest}
+interest = combine_dl1 %>% filter(ROW %in% c('12', '13', '14', '15', '16', '17', '18', '19', '20', '21', '22', '23', '24', '25', '26')) 
+```
+```{r below}
+below = combine_dl1 %>% filter(ROW %in% c('11', '12', '13', '14', '15', '16', '17', '18', '19', '20', '21', '22', '23', '24', '25')) 
+```
+
+```{r above}
+above = combine_dl1 %>% filter(ROW %in% c('13', '14', '15', '16', '17', '18', '19', '20', '21', '22', '23', '24', '25', '26', '27')) 
+```
+
+
+# Match Row, Path, DATE
+ 
+
+
+# Id dates with row of interest plus row above and row below
+
+## AK Data
+
+```{r}
+( dateFilterAk = akDl1 %>% 
+  select(name, PR, PATH, ROW, date) %>%
+  group_by(PR) %>%
+  arrange(date) %>%
+  pivot_wider(names_from = ROW, values_from = date) %>%
+  rowwise() %>% 
+  ungroup() %>%
+  select(-name, -PR) #%>%
+  #filter(PATH==72) 
+)
+
+```
+
+```{r}
+( path18 = dateFilterAk %>% select(PATH, "018") %>% drop_na() %>% rename(date="018") %>% mutate(row18=18) )
+( path17 = dateFilterAk %>% select(PATH, "017") %>% drop_na() %>% rename(date="017") %>% mutate(row17=17) )
+path16 = dateFilterAk %>% select(PATH, "016") %>% drop_na() %>% rename(date="016") %>% mutate(row16=16)
+path15 = dateFilterAk %>% select(PATH, "015") %>% drop_na() %>% rename(date="015") %>% mutate(row15=15)
+path14 = dateFilterAk %>% select(PATH, "014") %>% drop_na() %>% rename(date="014") %>% mutate(row14=14)
+path13 = dateFilterAk %>% select(PATH, "013") %>% drop_na() %>% rename(date="013") %>% mutate(row13=13)
+path12 = dateFilterAk %>% select(PATH, "012") %>% drop_na() %>% rename(date="012") %>% mutate(row12=12)
+path11 = dateFilterAk %>% select(PATH, "011") %>% drop_na() %>% rename(date="011") %>% mutate(row11=11)
+
+```
+
+```{r}
+joinAk = path18 %>% 
+  full_join(path17, by=c("PATH", "date")) %>%
+  full_join(path16, by=c("PATH", "date")) %>%
+  full_join(path15, by=c("PATH", "date")) %>% 
+  full_join(path14, by=c("PATH", "date")) %>%
+  full_join(path13, by=c("PATH", "date")) %>%
+  full_join(path12, by=c("PATH", "date")) %>%
+  full_join(path11, by=c("PATH", "date")) 
+  
+```
+
+
+```{r}
+
+( orgDF = joinAk %>%
+  unite(all_rows, starts_with('row'), na.rm = FALSE, sep = '_', remove = FALSE) %>%
+  mutate(rowID = row_number()) %>%
+  group_by(rowID)%>%
+  rowwise %>% 
+   mutate(countROW = n_distinct(c_across(row18:row12), na.rm = TRUE)) %>%
+   ungroup %>%
+  filter(countROW >2)
+  
+)
+```
+
+```{r}
+orgDF %>%
+  rowwise() %>%
+  mutate(na1 = str_locate_all(all_rows, "[NA]")) %>%
+  mutate(test = paste(na1, collapse = ','))
+  
+
+```
+
+
+
+
+
+
+
+# Filter Landsat scenes based on Date, row, path list
+
+# Final list of Dates with ROW and PATH
+
+
+# Save to csv
+
