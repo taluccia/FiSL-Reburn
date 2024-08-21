@@ -8,7 +8,6 @@ output: html_document
 
 
 ```{r}
-
 library(tidyverse)
 ```
 
@@ -104,9 +103,16 @@ dfAK %>% group_by(maxYear, albStartYr, PR) %>%
 ```{r}
 ( akPRYr = dfAK %>%
       group_by(PR, PATH, ROW) %>% 
-      summarise(maxYear = toString(unique(maxYear))) 
+      summarise(maxYear = toString(unique(maxYear)),
+                albStartYr = min(albStartYr)) 
 )
 ```
+
+```{r}
+write.csv(akPRYr, '../outputs/landsatScenes/LC1ScenesOfInterestAK.csv', row.names=F)
+
+```
+
 ## Generate the additonal ROW PATH needed to have for Albedo Processing
 
 ```{r}
@@ -187,7 +193,10 @@ median(dfCA$count)
       summarise(maxYear = toString(unique(maxYear))) 
 )
 ```
+```{r}
+write.csv(caPRYr, '../outputs/landsatScenes/LC1ScenesOfInterestCan.csv', row.names=F)
 
+```
 
 ## Generate the additonal ROW PATH needed to have for Albedo Processing
 
@@ -211,6 +220,7 @@ median(dfCA$count)
 ```
 
 ### Bind rows additional plus original
+
 ```{r}
 (ca = bind_rows(caPRYr, additionalRows) %>%
    distinct() %>%
