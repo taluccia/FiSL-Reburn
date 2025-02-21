@@ -1,0 +1,80 @@
+---
+title: "Landsat scenes Canada priority"
+author: "Anna Talucci"
+date: "2024-08-21"
+output: html_document
+---
+
+
+# Overview
+
+Prioritize Canadian Landsat Scenes for Angela's albedo processing.
+
+# Packages
+
+```{r}
+library(sf)
+library(tidyverse)
+```
+
+# Data
+
+```{r}
+boreal = st_read("../outputs/boundaries/landsatScenes/selectLandsatScenes.shp", "selectLandsatScenes")
+```
+
+```{r}
+ecozones = st_read("../data/spatialData/dire_ecoregs_caea/dire_ecoregs_caea.shp", "dire_ecoregs_caea")
+```
+
+# Data Attributes
+
+```{r}
+boreal
+```
+
+```{r}
+unique(boreal$ECO_NAME)
+```
+
+```{r}
+ecozones
+```
+
+# Reproject ecozones
+
+```{r}
+projection = st_crs(boreal)
+```
+
+```{r}
+ecozones_wgs84 = st_transform(ecozones, projection)
+```
+
+```{r}
+ecozones_wgs84
+```
+# Filter Scenes to Canada
+
+```{r}
+( can = boreal %>% filter(ISO_A2 =="CA") )
+```
+
+
+```{r}
+( join1 = st_join(can, ecozones_wgs84) )
+```
+
+
+```{r}
+( direScenes = join1 %>% 
+    st_drop_geometry() %>% 
+    drop_na(NA_L2NAME) %>% 
+    select(PATH, ROW, PR, ECO_NAME, NA_L2NAME) %>% 
+    filter(!duplicated(PR))
+  )
+```
+
+```{r}
+write.csv(direScenes, '../outputs/landsatScenes/CanadaDIREPriority.csv', row.names=F)
+```

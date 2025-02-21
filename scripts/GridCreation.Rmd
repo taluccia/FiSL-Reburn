@@ -1,0 +1,108 @@
+---
+title: "create 30 m grid"
+author: "Anna Talucci"
+date: "2024-11-20"
+output: html_document
+---
+
+
+# clear environment
+```{r}
+rm(list=ls())
+```
+
+
+# Overview
+Creat over view map with permafrost extent and summary of site data.
+Notes:From PCN-Fire-Sysnthesis "Manuscript Map"
+[Better colors for Mapping](https://www.esri.com/arcgis-blog/products/js-api-arcgis/mapping/better-colors-for-better-mapping/)
+# Packages
+```{r}
+library(tidyverse)
+library(sf)
+library(rnaturalearth)
+library(rnaturalearthdata)
+library(RColorBrewer)
+library(cowplot)
+library(ggpubr)
+library(ggnewscale)
+library(scales)
+library(ggrepel)
+library(patchwork)
+```
+
+
+
+# Data
+
+```{r}
+res = st_read("../data/boundaries/RESOLVE_Ecoregions_and_Biomes/Biomes_and_Ecoregions_2017.shp", "Biomes_and_Ecoregions_2017")
+```
+
+```{r}
+(na_boreal = res %>% filter(BIOME_NUM==6) )
+```
+
+[1] "Interior Alaska-Yukon lowland taiga"
+[2] "Interior Yukon-Alaska alpine tundra"
+[3] "Ogilvie-MacKenzie alpine tundra"    
+[4] "Muskwa-Slave Lake taiga"            
+[5] "Northern Canadian Shield taiga"     
+[6] "Watson Highlands taiga"             
+[7] "Northern Cordillera forests"        
+[8] "Northwest Territories taiga"        
+
+
+
+## World map
+https://datacatalog.worldbank.org/dataset/world-bank-official-boundaries
+
+```{r}
+wrld = st_read("../data/spatialData/world/WB_countries_Admin0_10m.shp", "WB_countries_Admin0_10m")
+```
+
+
+```{r}
+na = wrld %>% filter(FORMAL_EN %in% c("Canada", "United States of America"))
+```
+
+```{r}
+join = st_join(na_boreal, na, na, largest=TRUE)
+```
+
+```{r}
+( borealNA = join %>%
+  drop_na(FORMAL_EN) )
+```
+
+
+```{r}
+plot(st_geometry(borealNA))
+```
+
+# Projection
+
+```{r}
+projection = "+proj=aea +lon_0=-108.984375 +lat_1=48.2911002 +lat_2=69.1799501 +lat_0=58.7355252 +datum=WGS84 +units=m +no_defs"
+```
+
+# Reproject
+
+```{r}
+
+borealNA_pp = st_transform(borealNA, crs = projection)
+```
+
+# Grid 
+
+```{r}
+grid = st_make_grid(borealNA_pp, square=T, cellsize = c(30, 30)) %>%
+  cbind(data.frame(ID=sprintf(paste("GID%0", nchar(length(.)), "d", sep=""), 1:length(.)))) %>%
+  st_sf() %>%
+  st_cast('POLYGON') %>%
+  st_join(., borealNA, largest=TRUE) 
+```
+
+```{r}
+plot(st_geometry(grid))
+```

@@ -1,0 +1,134 @@
+---
+title: "LST SK Explore"
+author: "Anna Talucci"
+date: "2024-09-16"
+output: html_document
+---
+
+# Overview
+
+Explore LST SK
+
+
+# Packages
+```{r}
+library(tidyverse)
+library(sf)
+```
+
+# Data
+
+```{r}
+lst = read.csv("../data/eeSampledData/sampleLstSK.csv")
+```
+
+```{r}
+lstAk = read.csv("../data/eeSampledData/sampleLstAK2018.csv")
+```
+
+```{r}
+lstCan = read.csv("../data/eeSampledData/sampleLstCan2018.csv")
+```
+
+```{r}
+reburn = read_csv("../data/samplePoints/cleanedSamplePoints/skStratifiedSample1k20180213v2.cvs")
+```
+
+# Dataframes
+```{r}
+lstAk
+lstCan
+```
+
+# Organize data
+
+
+
+```{r}
+lst
+```
+
+
+```{r}
+sort(unique(lst$burned))
+
+```
+
+```{r}
+lst
+```
+
+```{r}
+
+( albedoPts = lst %>% 
+  dplyr::select(-ID, -.geo) %>% 
+  rename(systemId = system.index) %>%
+  filter(burned %in% c("One", "Three", "Two", "Unburned")) %>%
+  dplyr::select(systemId:lon, shldPln:tsfYr) )
+```
+
+```{r}
+( lstLong = lst %>% 
+  dplyr::select(system.index, burned, lat:lon, max_2013:min_2022) %>% 
+  rename(systemId = system.index) %>%
+  filter(burned %in% c("One", "Three", "Two", "Unburned")) %>%
+  pivot_longer(
+  cols = max_2013:min_2022,
+  names_to = "statYr",
+  values_to = "tempK") %>% 
+  separate(statYr, c("lstStat", "lstYr")) %>%
+  mutate(albedYr = as.numeric(lstYr)) %>%
+  left_join(., albedoPts, by = c("systemId", "albedYr")) %>%
+  drop_na(ECO_NAM) %>%
+    dplyr::select(-lat.y, -lon.y, -burned.y) %>%
+    rename(lat=lat.x, lon=lon.x, burned=burned.x, tsfClass = TmSncFr)
+)
+  
+```
+
+
+```{r}
+( lstStats = lstLong %>% pivot_wider(names_from = lstStat, values_from = tempK) %>% filter(tsfClass %in% c("0", "1", "2-5")))
+```
+```{r}
+lstStats$tsfClass = factor(lstStats$tsfClass, levels = c( "0", "1", "2-5"))
+lstStats$burned = factor(lstStats$burned, levels = c( "Unburned", "One", "Two", "Three"))
+```
+
+```{r}
+unique(lstStats$tsfClass)  
+unique(lstStats$burned)  
+```
+
+# Plot themes
+
+```{r}
+comp_theme = theme_bw() + theme(legend.position = "bottom") +  
+  theme(panel.grid.major = element_blank()) +
+    theme(axis.title.y = element_text(size = 11, hjust = 0.5, vjust = 1.1),
+        axis.text.x = element_text(size = 10, color = "black"),
+        axis.text.y = element_text(size = 10, color = "black"))
+```
+
+# Plots
+
+```{r}
+ggplot(lstStats, aes(x = burned, y=mean, color=tsfClass)) +
+  geom_boxplot() +
+  scale_color_manual(name= "Time Since Fire", values=c('#1b9e77','#d95f02','#7570b3',  '#d95f02','#7570b3', '#d95f02',  '#7570b3'), labels=c("unburned", "one year", "2-5 years")) +
+   #geom_point( aes(color = "purple"), size = 3, shape = 21) +
+ # scale_color_manual(values = c('#7b3294','#c2a5cf','#a6dba0','#008837')) %>%
+      #scale_color_manual(values=c('#1b9e77','#d95f02','#7570b3','#e7298a','#66a61e','#e6ab02','#a6761d'), name="") +
+
+    #geom_errorbar(aes(ymin = ymin,ymax = ymax)) +
+  labs(x="Time since fire", y="Temperature Kelvin") +
+     #facet_grid(vars(resBiome), vars(permaExtent), scales="free") +
+  facet_wrap(~shldPln, scales = "free") +
+  comp_theme +
+    theme(legend.position = "bottom",
+          axis.text.y = element_text(size=5),
+          axis.text.x = element_text(size=5, angle=45),
+          strip.background = element_rect( color="white", fill="white", size=1.5, linetype="solid" )) +
+    theme(strip.text.x = element_text(size = 6))
+
+```

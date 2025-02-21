@@ -1,0 +1,196 @@
+---
+title: "Google Drive HDF Images Explore"
+author: "Anna Talucci"
+date: "2024-12-20"
+output: html_document
+---
+# overview
+
+notes:
+Need to move dhf broad albedo image into single google drive folder
+Then transfer hdf albedo to cloud bucket
+Then use existing code to convert hdf to geotiff
+# packages
+
+```{r}
+library(googledrive)
+library(tidyverse)
+```
+
+# Authenticate your Google account
+
+```{r}
+drive_deauth()
+```
+
+
+```{r}
+drive_auth()
+```
+
+
+
+```{r}
+# Replace with the name or ID of your source folder
+source_folder <- "/content/drive/My Drive//Landsat8Collection1ScenesAK/albedo"  # Replace with your source folder name
+destination_folder <- "'/content/drive/My Drive//Landsat8Collection1ScenesAK/albedo/broad"  # Replace with your destination folder name
+
+# List files in the source folder
+source_files <- drive_ls(path = source_folder)
+
+# Filter files containing "broad" in their names
+broad_files <- source_files[grepl("broad", source_files$name, ignore.case = TRUE), ]
+```
+
+
+
+--------------------
+
+# List files in the specified folder
+
+```{r}
+files_in_folder <- drive_ls(path='~/Landsat8Collection1ScenesAK/albedo/', pattern = "albedo_broad")
+```
+number of broad files = 1039
+
+```{r}
+path64 <- drive_ls(path='~/Landsat8Collection1ScenesAK/albedo/byPath/path64/', pattern = "albedo_broad")
+path65 <- drive_ls(path='~/Landsat8Collection1ScenesAK/albedo/byPath/path65/', pattern = "albedo_broad")
+path66 <- drive_ls(path='~/Landsat8Collection1ScenesAK/albedo/byPath/path66/', pattern = "albedo_broad")
+path67 <- drive_ls(path='~/Landsat8Collection1ScenesAK/albedo/byPath/path67/', pattern = "albedo_broad")
+path68 <- drive_ls(path='~/Landsat8Collection1ScenesAK/albedo/byPath/path68/', pattern = "albedo_broad")
+path69 <- drive_ls(path='~/Landsat8Collection1ScenesAK/albedo/byPath/path69/', pattern = "albedo_broad")
+```
+
+```{r}
+path64
+path65
+path66
+path67
+path68
+path69
+```
+
+
+# Extract the file names
+
+
+
+```{r}
+file_names <- files_in_folder$name
+```
+1039
+```{r}
+file_names
+```
+
+
+# New Folder
+
+```{r}
+folder <- drive_mkdir(name= 'broad', path="~/Landsat8Collection1ScenesAK/albedo/")
+```
+
+
+# Test Run
+```{r}
+filesTest1 <- drive_ls(path='~/Landsat8Collection1ScenesAK/albedo/test1/', pattern="albedo_broad")
+```
+
+```{r}
+# Get folder metadata by name
+folder_name <- "~/Landsat8Collection1ScenesAK/albedo/test1"
+
+# Use drive_find to search for the folder by name (it can return files or folders)
+folder_metadata <- drive_find(pattern = folder_name, type = "folder")
+
+# View the folder metadata (including the folder ID)
+print(folder_metadata)
+```
+
+```{r}
+# Extract the folder ID from the metadata
+folder_id <- folder_metadata$id[1]  # Assuming the first result is the correct folder
+print(folder_id)
+```
+
+```{r}
+parent_folder_id <- file_metadata$parents[[1]]
+print(parent_folder_id)
+```
+
+```{r}
+folderTest1$id[5]
+```
+```{r}
+drive_get(path='~/Landsat8Collection1ScenesAK/albedo/test1')
+```
+
+```{r}
+files_to_move <- drive_ls(path='~/Landsat8Collection1ScenesAK/albedo/test1/', pattern = "albedo_broad")
+```
+```{r}
+folderTest1
+```
+
+```{r}
+folderTest1$id
+```
+
+```{r}
+file_names_test1 <- folderTest1$name
+```
+
+```{r}
+file_names_test1
+```
+```{r}
+folderTest2 <- drive_mkdir(name= 'test2', path="~/Landsat8Collection1ScenesAK/albedo/test1/")
+```
+
+# Get the folder ID of the newly created folder
+```{r}
+destination_folder_id <- folderTest2$id
+destination_folder_id
+```
+```{r}
+source_folder_id <- folderTest1$id[1]
+source_folder_id
+```
+
+# Move each file to the new folder
+```{r}
+# Define the source and destination folder IDs (replace with your folder IDs)
+source_folder_id <- folderTest1$id[1]  # Folder where the files are currently
+destination_folder_id <- folderTest2$id # Folder where you want to move the files
+
+# List all files in the source folder
+files_in_source <- drive_ls(as_id(source_folder_id))
+
+# Define a pattern to match filenames (e.g., files with a certain extension or substring)
+pattern <- "albedo_broad"  # Replace with the pattern you're searching for
+
+# Filter files based on the pattern (e.g., files containing "report" in their name)
+files_to_move <- files_in_source %>%
+  filter(grepl(pattern, name))
+
+# Move the files to the destination folder
+for (file in files_to_move$id) {
+  drive_move(file, path = as_id(destination_folder_id))
+  cat("Moved file:", file, "\n")
+}
+```
+
+
+
+
+
+
+
+
+
+# Verify if the files have been moved (optional)
+```{r}
+moved_files <- drive_find(q = paste0("'", folderTest2_id, "' in parents"))
+print(moved_files)
+```

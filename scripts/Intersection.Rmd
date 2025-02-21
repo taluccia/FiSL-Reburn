@@ -1,0 +1,46 @@
+---
+title: "Fire Perimeters by Year"
+author: "Anna Talucci"
+date: "2024-11-18"
+output: html_document
+---
+
+# Overview
+Organize shapefile data that feeds into other scripts
+
+Combine Canadian fire perimetes
+
+join Ecoregions to perimeters
+simplify perimeters
+# Packages
+```{r}
+library(sf)
+library(tidyverse)
+library(magrittr)
+library(pacman)
+```
+
+# Data 
+## AK Fires
+```{r}
+AKFires = st_read("../data/boundaries/firePerimeters/mtbs_perimeter_data/mtbs_perims_DD.shp", "mtbs_perims_DD")
+
+```
+
+```{r}
+( akFIRES2013 = AKFires %>% filter(BurnBndLat > 50) %>%
+  dplyr::mutate(fireYr = lubridate::year(Ig_Date), 
+                month = lubridate::month(Ig_Date), 
+                day = lubridate::day(Ig_Date)) %>%
+    filter(fireYr>= 2013) )
+```
+
+```{r}
+ak_x <- st_make_valid(akFIRES2013) %>% st_set_precision(1) %>% st_intersection()
+
+```
+# original attributes, n.overlaps and alist column of origins 
+# (as indices/row numbers of original dataset)
+```{r}
+ak_x
+```
