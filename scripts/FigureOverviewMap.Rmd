@@ -5,11 +5,6 @@ date: "2024-05-15"
 output: html_document
 ---
 
-
-
-
-
-
 # clear environment
 ```{r}
 rm(list=ls())
@@ -44,19 +39,15 @@ res = st_read("../data/spatialData/RESOLVE_Ecoregions_and_Biomes/Biomes_and_Ecor
 ```
 
 ```{r}
-na_boreal = res %>% filter(BIOME_NUM==6)
+( na_boreal = res %>% filter(BIOME_NUM==6) %>% filter(REALM=="Nearctic"))
 ```
 
+    
 
-
-```{r eval=FALSE, include=FALSE}
-na_boreal = res %>% filter(ECO_NAME %in% c("Interior Alaska-Yukon lowland taiga", "Northwest Territories taiga",  
-"Watson Highlands taiga", "Northern Cordillera forests", "Muskwa-Slave Lake taiga",
-"Northern Canadian Shield taiga", " Midwest Canadian Shield forests", "Mid-Canada Boreal Plains forests",
-"Southern Hudson Bay taiga", "Central Canadian Shield forests", "Eastern Canadian Shield taiga", 
-"Eastern Canadian forests",   "Midwest Canadian Shield forests"))
+```{r}
+unique(na_boreal$ECO_NAME)
 ```
-
+"Interior Alaska-Yukon lowland taiga", "Northern Canadian Shield taiga", "Northwest Territories taiga", 
 
 ## World map
 https://datacatalog.worldbank.org/dataset/world-bank-official-boundaries

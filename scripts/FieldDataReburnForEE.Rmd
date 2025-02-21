@@ -51,21 +51,36 @@ glimpse(lcdata)
 lcdata[is.na(lcdata$Burn_Depth),]
 ```
 
-# Assign unique row ideas
+# Assign unique row ideas, add file name
+lcsites = read_csv("../data/fieldCsv/LC_SITES_11142023.csv")
+lcdata = read_csv("../data/fieldCsv/LC_Data_09052023.csv")
+fd = read_csv("../data/fieldCsv/FiSL_sitedata_BB2023.csv")
+fp = read_csv("../data/fieldCsv/FINAL_PLOTS_01142024.csv")
 
 ```{r}
-( lcdata_id = lcdata %>% mutate(rowId = row_number()) %>% mutate(id = str_c(Researcher,"_",rowId)) )
+( lcdata_id = lcdata %>% 
+    mutate(rowId = row_number()) %>% 
+    mutate(id = str_c(Researcher,"_",rowId)) %>% 
+    mutate(file="LC_Data_09052023"))
 ```
 ```{r}
 lcdata_id$...7[lcdata_id$...7 == "Before 1750"] <- 1750
 ```
 
 ```{r}
-( lcsites_id = lcsites %>% mutate(rowId = row_number()) %>% mutate(researcher = "walkerLC") %>% mutate(id = str_c(researcher,"_",rowId)) )
+( lcsites_id = lcsites %>% 
+    mutate(rowId = row_number()) %>% 
+    mutate(researcher = "walkerLC") %>% 
+    mutate(id = str_c(researcher,"_",rowId)) %>% 
+    mutate(file="LC_SITES_11142023"))
 ```
 
 ```{r}
-( fp_id = fp %>% mutate(rowId = row_number()) %>% mutate(researcher = "walker") %>% mutate(id = str_c(researcher,"_",rowId)) )
+( fp_id = fp %>% 
+    mutate(rowId = row_number()) %>% 
+    mutate(researcher = "walker") %>% 
+    mutate(id = str_c(researcher,"_",rowId)) %>% 
+    mutate(file="FINAL_PLOTS_01142024") )
 ```
 
 
@@ -81,7 +96,7 @@ Notes:
 # Clean
 ```{r}
 ( fp1 = fp_id %>% 
-    dplyr::select(id, unique_site_id.x, date.x, official_fire_scar, site, latitude, longitude, recent_burn, second_burn, triple_burn) %>%
+    dplyr::select(id, unique_site_id.x, date.x, official_fire_scar, site, latitude, longitude, recent_burn, second_burn, triple_burn, file) %>%
     rename(siteId = unique_site_id.x, date=date.x, location = official_fire_scar, burnYr1=recent_burn, burnYr2=second_burn,  burnYr3=triple_burn, lat=latitude, lon=longitude) %>% 
     mutate(siteId = as.character(siteId),
            site = as.character(site))
@@ -98,7 +113,7 @@ Notes:
 
 ```{r}
 ( lc1 = lcdata_id %>% 
-    dplyr::select(id, Researcher, Site_Name, Sampling_Date, StudyArea, Year_of_Burn, `...7`, `...8`, Latitude, Longitude) %>%
+    dplyr::select(id, Researcher, Site_Name, Sampling_Date, StudyArea, Year_of_Burn, `...7`, `...8`, Latitude, Longitude, file) %>%
     rename(date=Sampling_Date, siteId = Researcher, site= Site_Name, location = StudyArea, burnYr1=Year_of_Burn, burnYr2=`...7`,  burnYr3=`...8`, lat=Latitude, lon=Longitude) %>%
   drop_na(lat) %>%
     mutate(burnYr2 = as.numeric(burnYr2))
@@ -109,7 +124,7 @@ Notes:
 
 ```{r}
 ( lcsites1 = lcsites_id %>% 
-    dplyr::select(id, unique_site_id, date, official_fire_scar, site, latitude, longitude, recent_burn, second_burn, triple_burn) %>%
+    dplyr::select(id, unique_site_id, date, official_fire_scar, site, latitude, longitude, recent_burn, second_burn, triple_burn, file) %>%
     rename(siteId = unique_site_id, location = official_fire_scar, burnYr1=recent_burn, burnYr2=second_burn,  burnYr3=triple_burn, lat=latitude, lon=longitude) %>% 
     mutate(siteId = as.character(siteId),
            site = as.character(site))
@@ -125,6 +140,9 @@ Notes:
 
 ```{r}
 unique(sort(df$burnYr1))
+```
+```{r}
+write.csv(df, "../outputs/field/combinedFieldData.csv", row.names = FALSE)
 ```
 
 # To point shp

@@ -19,26 +19,323 @@ library(sf)
 # Data
 
 ```{r}
-nbr = read.csv("../data/fieldDnbr/fislLcNBRsample.csv")
+nbr = read.csv("../data/eeSampledData/field/fislLcNBRsample.csv")
+```
+
+```{r}
+field = read_csv("../outputs/field/combinedFieldData.csv")
+```
+
+```{r}
+lcsites = read_csv("../data/fieldCsv/LC_SITES_11142023.csv")
+lcdata = read_csv("../data/fieldCsv/LC_Data_09052023.csv")
+fd = read_csv("../data/fieldCsv/FiSL_sitedata_BB2023.csv")
+fp = read_csv("../data/fieldCsv/FINAL_PLOTS_01142024.csv")
+```
+
+# Dataframe
+```{r}
+field
+```
+# Field organize and clean to point for ee
+
+```{r}
+( fieldPlots = field %>% 
+  group_by(id, fire_scar, site, lat, lon) %>%
+  summarize(n= n(),
+            recent_burn = toString(unique(recent_burn)),
+            second_burn = toString(unique(second_burn)),
+            triple_burn = toString(unique(triple_burn)),
+            reburn_age = toString(unique(reburn_age)),
+            triple_age = toString(unique(triple_age))) %>%
+    mutate(recent_burn = as.numeric(recent_burn),
+           second_burn = as.numeric(second_burn),
+           triple_burn = as.numeric(triple_burn),
+           reburn_age = as.numeric(reburn_age),
+           triple_age = as.numeric(triple_age))
+)          
+
+```
+
+```{r}
+fieldPlots %>% filter(lon>0)
+```
+```{r}
+fieldPlots$lon[fieldPlots$id=="MmBonanza_4"]<- -150.6562
+fieldPlots$lon[fieldPlots$id=="SnohomishEagle_61"]<- -152.7834
+```
+
+```{r}
+( fieldPlotsRecent = fieldPlots %>% 
+    filter(reburn_age <=30)
+)
+```
+
+## Function to make points
+
+```{r}
+df_to_sf <- function(x){
+  st_as_sf(x, coords = c("lon","lat"), crs = 4326, remove = FALSE)
+}
+```
+
+```{r}
+( fieldPlotsPoints = fieldPlots %>% df_to_sf()
+)
+```
+
+```{r eval=FALSE, include=FALSE}
+st_write(fieldPlotsPoints, "../outputs/spatialDataCreate/shapefiles/field/fieldPlotPointsReburn.shp", driver="ESRI Shapefile")
+```
+
+# NBR From ee
+
+```{r}
+nbr
+```
+```{r}
+( nbr_clean = nbr %>%
+  rename(fire_scar = fir_scr, recent_burn=rcnt_br, reburn_age = rebrn_g, second_burn = scnd_br) %>%
+  dplyr::select(-.geo, -system.index)
+)
+```
+
+```{r}
+( join = fieldPlots 
+  %>% left_join(., nbr_clean, by = c("id", "lat", "lon", "fire_scar", "n", "recent_burn", "reburn_age", "second_burn", "site")) #%>% dplyr::select(id:file, nbr2003:nbr2023)
+)
+
+```
+
+```{r}
+(recent = join %>% 
+    filter(reburn_age <=30)
+  
+)
+```
+
+```{r}
+unique(sort(recent$recent_burn))
+```
+
+```{r}
+( recent2015 = recent %>%
+    filter(recent_burn==2015) %>%
+    dplyr::select(id:second_burn, reburn_age, nbr2003, nbr2004, nbr2005, nbr2014, nbr2015, nbr2016) %>%
+    mutate(dNBR2015 = nbr2014-nbr2016,
+           dNBR2004 = nbr2003-nbr2005,
+           dNBRTotalChange = nbr2003-nbr2015
+           )
+    
+)
+```
+
+
+```{r}
+( recent2018 = recent %>%
+    filter(recent_burn==2018) %>%
+    dplyr::select(id:second_burn, reburn_age, nbr2017, nbr2018, nbr2019) %>%
+    mutate(dNBR2018 = nbr2017-nbr2019)
+    
+)
+```
+
+```{r}
+( recent2019 = recent %>%
+    filter(recent_burn==2019) %>%
+    dplyr::select(id:second_burn, reburn_age, nbr2018, nbr2019, nbr2020) %>%
+    mutate(dNBR2019 = nbr2018-nbr2020)
+    
+)
+```
+
+```{r}
+( recent2021 = recent %>%
+    filter(recent_burn==2021) 
+)
+```
+
+```{r}
+( recent2022 = recent %>%
+    filter(recent_burn==2022) 
+)
+```
+
+```{r}
+unique(sort(recent2022$second_burn))
+```
+
+```{r}
+( recent2022_2005 = recent %>%
+    filter(recent_burn==2022) %>%
+    filter(second_burn == 2005) %>%
+    dplyr::select(id:second_burn, reburn_age, nbr2004, nbr2005, nbr2006, nbr2021, nbr2022, nbr2023) %>%
+    mutate(dNBR2022 = nbr2021-nbr2023,
+           dNBR2005 = nbr2004-nbr2006,
+           dNBRTotalChange = nbr2004-nbr2023
+           ) %>%
+  drop_na(dNBRTotalChange)
+)
+```
+
+```{r}
+( recent2022_2007 = recent %>%
+    filter(recent_burn==2022) %>%
+    filter(second_burn == 2007) %>%
+    dplyr::select(id:second_burn, reburn_age, nbr2006, nbr2007, nbr2008, nbr2021, nbr2022, nbr2023) %>%
+    mutate(dNBR2022 = nbr2021-nbr2023,
+           dNBR2005 = nbr2006-nbr2008,
+           dNBRTotalChange = nbr2006-nbr2023
+           )  
+)
+```
+
+
+```{r}
+( recent2022_2011 = recent %>%
+    filter(recent_burn==2022) %>%
+    filter(second_burn == 2011) %>%
+    dplyr::select(id:second_burn, reburn_age, nbr2010, nbr2011, nbr2012, nbr2021, nbr2022, nbr2023) %>%
+    mutate(dNBR2022 = nbr2021-nbr2023,
+           dNBR2011 = nbr2010-nbr2012,
+           dNBRTotalChange = nbr2010-nbr2023
+           ) %>%
+  drop_na(dNBRTotalChange)
+)
 ```
 
 
 
-# Dataframe
+
+
+
+
+
+
+
+
+
+
+# OLD CODE
+
+
+```{r}
+( fpSubset = fp %>% 
+    dplyr::select(fire_scar, site, latitude, longitude, recent_burn, second_burn, triple_burn, reburn_age, triple_age) %>%
+    rename(lat=latitude, lon = longitude))
+```
+
+```{r}
+unique(fpSubset$site)
+```
+
+# Join
+
+```{r}
+( nbr1 = nbr %>% 
+    mutate(idRow = row_number()) )
+```
+
 
 ```{r}
 nbr
 ```
 
+```{r}
+( field = fpSubset %>% unite("id", fire_scar, site, sep = "_", remove = FALSE, na.rm = FALSE) )
+```
 
-# Calculate 
+
+
+
+
+
+```{r}
+join = field %>% left_join(., nbr1, by = c("id", "lat", "lon")) #%>% dplyr::select(id:file, nbr2003:nbr2023)
+
+join
+```
+
+```{r}
+
+( reburns = join %>% drop_na(burnYr2) %>%
+    mutate(lag1 = (burnYr1-burnYr2), 
+           lag2 = (burnYr2 - burnYr3)) %>% 
+  filter(lag1 <= 30) %>%
+    filter(burnYr2 >= 1984) %>%
+    mutate()
+  ) 
+```
+```{r}
+unique(reburns$lag1)
+unique(reburns$burnYr1)
+unique(reburns$burnYr2)
+```
+# Organize Data
+
+```{r}
+(nbr_long = nbr1 %>% dplyr::select(-.geo, -system.index) %>%
+  pivot_longer(
+    cols = starts_with("nbr"),
+    names_to = "year",
+    names_prefix = "nbr",
+    values_to = "nbr")
+)
+```
+```{r}
+unique(nbr_long$site)
+unique(nbr_long$siteId)
+unique(nbr_long$id)
+unique(nbr_long$location)
+unique(nbr_long$burnYr1)
+```
+
+
+```{r}
+nbr_long %>% filter_all(any_vars(is.na(.))) 
+```
+
+```{r}
+nbr_long  %>% 
+  group_by(location, burnYr1) %>%
+  summarise(n_site = n_distinct(site),
+            n_siteId = n_distinct(siteId),
+            n_id = n_distinct(id),
+            n_idRow = n_distinct(idRow))
+```
+
+```{r}
+nbr_long
+```
 
 # Figures
+
+## Trajectories
+facet_grid(vars(location), vars(burnYr1),  scales = "free") +
+```{r}
+nbr_long %>% 
+  filter(location == "Alaska") %>% 
+  filter(burnYr1 == 2004) %>%
+  ggplot(., aes(x=year, y=nbr, color=as.factor(idRow))) +
+  geom_point() +
+  theme_minimal() +
+  labs(x="Years", y="NBR", subtitle="burn year 1 2004")
+```
+
+
+
+
+
+
+
+
+
+
 
 ## Boxplot dNBR for field sites split by most recent burn year
 
 ```{r}
-ggplot(dnbr, aes(x=as.factor(rcnt_br), y=dnbr)) +
+ggplot(dnbr, aes(x=as.factor(rcnt_br), y=nbr)) +
   geom_boxplot(color="#91bfdb") +
   theme_minimal() +
   labs(x="Year of most recent burn", y="dNBR")

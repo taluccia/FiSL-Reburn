@@ -23,39 +23,33 @@ library(pacman)
 # Data 
 ## AK Fires
 ```{r}
-AKFires = st_read("../data/mtbs_perims_DD.shp", "mtbs_perims_DD")
+AKFires = st_read("../data/boundaries/firePerimeters/mtbs_perimeter_data/mtbs_perims_DD.shp", "mtbs_perims_DD")
 
 ```
 
 ## Canada Fire perimetes
 ```{r}
-CanFires = st_read("../data/nbac_1986_to_2020/nbac_1986_to_2020_20210810.shp", "nbac_1986_to_2020_20210810")
-CanFires2021 = st_read("../data/nbac_2021/nbac_2021_r9_20220624.shp", "nbac_2021_r9_20220624")
+CanFires = st_read("../data/boundaries/firePerimeters/nbac_1986_to_2020/nbac_1986_to_2020_20210810.shp", "nbac_1986_to_2020_20210810")
+CanFires2021 = st_read("../data/boundaries/firePerimeters/nbac_2021/nbac_2021_r9_20220624.shp", "nbac_2021_r9_20220624")
 ```
 
 ## Canada Proviences
 ```{r}
-prov = st_read("../data/lpr_000b16a_e/lpr_000b16a_e.shp", "lpr_000b16a_e")
+prov = st_read("../data/boundaries/lpr_000b16a_e/lpr_000b16a_e.shp", "lpr_000b16a_e")
 ```
 ## Political Bounds
 ```{r}
-political = st_read("../data/NorthAmerica/boundaries_p_2021_v3.shp", "boundaries_p_2021_v3")
+political = st_read("../data/boundaries/NorthAmerica/boundaries_p_2021_v3.shp", "boundaries_p_2021_v3")
 ```
 
 ## Ecoregions
 ```{r}
-ecor = st_read("../data/ecoLevel2/NA_CEC_Eco_Level2.shp", "NA_CEC_Eco_Level2")
+ecor = st_read("../data/boundaries/ecozones/ecoLevel2/NA_CEC_Eco_Level2.shp", "NA_CEC_Eco_Level2")
 ```
 
-```{r}
-ecor
-unique(ecor$NA_L2NAME)
-```
 # Select 
 ##Poloitical Polygons of interest
-```{r}
-political %>% filter(COUNTRY =="CAN")
-```
+
 ```{r}
 ( polBor = political %>% filter(NAME_En %in% c("Alberta", "Alaska", "British Columbia", "Yukoon", "Northwest Territories", "Saskatchewan", "Manitoba", "New Brunswick", "Newfoundland and Labrador", "Nova Scotia", "Nunavut", "Ontario", "Prince Edward Island", "Quebec")) )
 ```
@@ -96,6 +90,60 @@ unique(munson$Incid_Name)
 ```{r eval=FALSE, include=FALSE}
 st_write(munson, "../outputs/MunsonCreek2021.shp", driver="ESRI Shapefile")
 ```
+## Select Case study fires
+
+var fireIDList = ["AK6586915468120150622", 'AK6594715517520180604']
+var fireAk = ee.FeatureCollection('users/FiSL-Reburn/AK4326Fires1986-2021').filter(ee.Filter.inList("Year",  yrList))
+var reburnEx = fireAk.filter(ee.Filter.inList('FireID', fireIDList ))
+
+```{r}
+akCaseStudyID = c("AK6586915468120150622", 'AK6594715517520180604')
+manleyHS = c('AK6481415114120180607', 'AK6490715062520210615')
+```
+```{r}
+AKFires
+max(AKFires$Ig_Date)
+```
+
+```{r}
+( akCaseStudy = AKFires %>% filter(BurnBndLat>50) %>% 
+  dplyr::mutate(year = lubridate::year(Ig_Date), 
+                month = lubridate::month(Ig_Date), 
+                day = lubridate::day(Ig_Date)) %>%
+  filter(Event_ID %in% akCaseStudyID) 
+  )
+
+```
+
+```{r}
+AKFires %>% filter(BurnBndLat>50) %>% 
+  dplyr::mutate(year = lubridate::year(Ig_Date), 
+                month = lubridate::month(Ig_Date), 
+                day = lubridate::day(Ig_Date)) %>%
+  filter(Event_ID=='AK6490715062520210615') 
+```
+
+```{r}
+( manleyHSCaseStudy = AKFires %>% filter(BurnBndLat>50) %>% 
+  dplyr::mutate(year = lubridate::year(Ig_Date), 
+                month = lubridate::month(Ig_Date), 
+                day = lubridate::day(Ig_Date)) %>%
+  filter(Event_ID %in% manleyHS) 
+  )
+
+```
+
+```{r include=FALSE}
+st_write(akCaseStudy, "../outputs/boundaries/firePerimeters/AkCaseStudyPerimeters.shp", driver="ESRI Shapefile")
+```
+
+```{r include=FALSE}
+st_write(akCaseStudy, "../outputs/boundaries/firePerimeters/AkCaseStudyPerimeters.gpkg")
+```
+
+```{r include=FALSE}
+st_write(manleyHSCaseStudy, "../outputs/boundaries/firePerimeters/ManleyHSPerimeters.gpkg")
+```
 
 # Combine Canadian Fires
 ##Select columns and bind all fires canadian
@@ -107,6 +155,9 @@ st_write(munson, "../outputs/MunsonCreek2021.shp", driver="ESRI Shapefile")
 ( allFires = bind_rows(CanFires1, CanFires2021) %>% dplyr::select(-COMMENTS) )
 ```
 
+```{r include=FALSE}
+st_write(allFires, "../outputs/firePerimeters/Canada_1986_2021.shp", driver="ESRI Shapefile")
+```
 
 # Reproject
 ```{r}
@@ -172,10 +223,11 @@ Need to reduce some of the vertices of the polygons
 ```{r eval=FALSE, include=FALSE}
 st_write(skFires, "../outputs/SKFires1986-2021.shp", driver="ESRI Shapefile")
 ```
+
 #  Alaska Fires
 
 ```{r}
-( akFIRES = firesAK %>% filter(BurnBndLat > 50) %>%
+( akFIRES = AKFires %>% filter(BurnBndLat > 50) %>%
   dplyr::mutate(fireYr = lubridate::year(Ig_Date), 
                 month = lubridate::month(Ig_Date), 
                 day = lubridate::day(Ig_Date)) %>%
@@ -184,7 +236,7 @@ st_write(skFires, "../outputs/SKFires1986-2021.shp", driver="ESRI Shapefile")
 
 
 ```{r eval=FALSE, include=FALSE}
-st_write(akFires, "../outputs/AkFires1986-2021.shp", driver="ESRI Shapefile")
+st_write(akFIRES, "../outputs/Ak_1986_2021.shp", driver="ESRI Shapefile")
 ```
 
 ```{r}
