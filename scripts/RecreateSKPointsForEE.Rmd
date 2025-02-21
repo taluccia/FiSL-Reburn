@@ -1,0 +1,44 @@
+---
+title: "Recreate Points for SK"
+author: "Anna Talucci"
+date: "2024-09-16"
+output: html_document
+---
+
+# Overview
+
+
+# Packages
+```{r}
+library(tidyverse)
+library(sf) 
+
+
+```
+
+
+# Data
+
+```{r}
+sk = read_csv("../data/samplePoints/cleanedSamplePoints/skStratifiedSample1k20180213v2.cvs")
+```
+
+```{r}
+sk
+```
+
+## Function to make points
+
+```{r}
+df_to_sf <- function(x){
+  st_as_sf(x, coords = c("lon","lat"), crs = 4326, remove = FALSE)
+}
+```
+
+```{r}
+( skPts = sk %>% df_to_sf() )
+```
+
+```{r eval=FALSE, include=FALSE}
+st_write(skPts, "../outputs/skStratifiedEco1000NoH2Ov2.shp", driver="ESRI Shapefile")
+```
