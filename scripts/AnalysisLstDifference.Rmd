@@ -1,0 +1,469 @@
+---
+title: "Analysis LST SK Test diff"
+author: "Anna Talucci"
+date: "2024-10-10"
+output: html_document
+---
+
+
+# Overview
+Analysis evaluating differences in land surface temperature between reburn classes across the boreal from 2013-2022. 
+
+# Packages
+```{r}
+library(tidyverse)
+library(emmeans) 
+library(tweedie)
+library(statmod)
+library(car)
+
+library(MASS)
+library(cplm)
+library(aod)
+```
+
+
+# Data
+
+```{r}
+alldata = read_csv('../outputs/cleanedSamplePoints/LstBoreal2013-2022.csv') 
+```
+
+```{r}
+data18 = read_csv('../outputs/cleanedSamplePoints/2018LSTSampleWesternCanadaAlaska.cvs')
+```
+```{r}
+data18
+alldata
+```
+
+# check factors
+
+```{r}
+data18 = data18 %>% mutate(TimeSinceFire= ordered(TimeSinceFire, levels = c("0", "1", "2-5", "6-10", "11-20", "21-31", "Other")),
+         burned = ordered(burned, levels = c("Unburned", "One", "Two", "Three", "other")))
+```
+
+# Subset
+```{r}
+unique(data18$TimeSinceFire)
+unique(alldata$TimeSinceFire)
+```
+
+```{r}
+( lstLong = data18 %>% 
+    rename(lat = latitude, lon = longitude) %>% 
+  filter(burned %in% c("One", "Three", "Two", "Unburned")) %>%
+  pivot_longer(
+  cols = c(max_2018, mean_2018, median_2018, min_2018),
+  names_to = "statYr",
+  values_to = "tempK") %>% 
+  separate(statYr, c("lstStat", "lstYr")) %>%
+  mutate(lstYr = as.numeric(lstYr)) %>%
+    mutate(bTSF = paste0(burned,"_",TimeSinceFire))
+)
+  
+```
+
+```{r}
+( dataLong = alldata %>% 
+    rename(lat = latitude, lon = longitude) %>% 
+  filter(burned %in% c("One", "Three", "Two", "Unburned")) %>%
+  pivot_longer(
+  cols = starts_with("mean"),
+  names_to = "statYr",
+  values_to = "tempK") %>% 
+  separate(statYr, c("lstStat", "lstYr")) %>%
+  mutate(lstYr = as.numeric(lstYr))
+    
+)
+  
+```
+
+```{r}
+( lstStats = lstLong %>% pivot_wider(names_from = lstStat, values_from = tempK) %>% filter(TimeSinceFire %in% c("0", "1", "2-5")))
+```
+```{r}
+lstStats$TimeSinceFire = factor(lstStats$TimeSinceFire, levels = c( "0", "1", "2-5"))
+lstStats$burned = factor(lstStats$burned, levels = c( "Unburned", "One", "Two", "Three"))
+```
+
+```{r}
+unique(lstStats$tsfClass)  
+unique(lstStats$burned)  
+```
+Gaussian
+
+```{r}
+( recent = lstLong %>% filter(TimeSinceFire %in% c("0", "1", "2-5")) %>% filter(burned %in% c("Unburned", "One", "Two", "Three")) )
+```
+
+```{r}
+( recentAllData = dataLong %>% filter(TimeSinceFire %in% c("0", "1", "2-5")) %>% filter(burned %in% c("Unburned", "One", "Two", "Three")) )
+```
+
+```{r}
+( lateTimeSteps = dataLong %>% filter(TimeSinceFire %in% c("6-10", "10-19", "20-31")) %>% filter(burned %in% c("Unburned", "One", "Two", "Three")) )
+```
+
+```{r}
+unique(lateTimeSteps$TimeSinceFire)
+```
+```{r}
+lateTimeSteps$TimeSinceFire = factor(lateTimeSteps$TimeSinceFire, levels = c( "6-10", "10-19", "20-31", "other"))
+lateTimeSteps$burned = factor(lateTimeSteps$burned, levels = c( "Unburned", "One", "Two", "Three"))
+```
+
+# Ecozones
+```{r}
+unique(recentAllData$ECO_NAME)
+```
+# Model Recent time since fire effects
+
+```{r}
+fit1 = glm(tempK ~ bTSF, data = recentAllData, family = gaussian)
+```
+
+```{r}
+summary(fit1)
+```
+
+### Residuals: 
+
+```{r eval=FALSE, include=FALSE}
+recent$fit1.res = resid(fit1, type = "pearson")
+recent$fit1.fit = fitted(fit1)
+
+sum(residuals(fit1, type="pearson")^2)/fit1$df.res
+
+qplot(fitted(fit1), resid(fit1)) + theme_bw()
+
+```
+
+
+```{r}
+summary(fit1)
+```
+
+```{r}
+emmfit1 = emmeans(fit1, specs = ~ bTSF)
+emmfit1
+```
+```{r}
+dfemmfit1 = as.data.frame(emmfit1)
+
+dfemmfit1.1 = dfemmfit1 %>% mutate(mean=(emmean),
+                  SE=(SE),
+                  LCL=(lower.CL),
+                  UCL=(upper.CL),
+                  bTSF = factor(bTSF, levels = c("Unburned_0", 'One_1', 'One_2-5',  'Two_1', 'Two_2-5', 'Three_1','Three_2-5')))
+
+dfemmfit1.1
+```
+
+#5495CFFF, #F5AF4DFF, #DB4743FF, #7C873EFF, #FEF4D5FF
+```{r}
+allDataFit1Plot = ggplot(data = dfemmfit1.1) + 
+  geom_point(aes(x=bTSF, y=mean, color = bTSF)) +
+  geom_errorbar(aes(x=bTSF, ymin = LCL, ymax = UCL, color = bTSF)) +
+  coord_flip() +
+  scale_color_manual(name= "Time Since Fire", values=c('#7C873EFF','#DB4743FF','#F5AF4DFF',  '#DB4743FF','#F5AF4DFF', '#DB4743FF','#F5AF4DFF'), labels=c("unburned", "one year", "2-5 years")) +
+  labs(x="", y="Land surface temperature (Kelvin)") +
+  scale_x_discrete(labels= c("Unburned", "One", "One", "Two", "Two", "Three", "Three")) +
+    theme_bw() #+
+  #theme(legend.position="none")
+
+allDataFit1Plot
+```
+
+```{r}
+ggsave("../figures/LSTrecentBoreal2013-2022.png", plot = allDataFit1Plot, width = 8, height =6, units = c("in"), dpi=600, bg = "white" )
+```
+
+### Annotate Plot
+```{r}
+allDataFit1Comp1 = ggplot(data = dfemmfit1.1) + 
+  geom_point(aes(x=bTSF, y=mean, color = bTSF)) +
+  geom_errorbar(aes(x=bTSF, ymin = LCL, ymax = UCL, color = bTSF)) +
+  coord_flip() +
+  scale_color_manual(name= "Time Since Fire", values=c('#7C873EFF','#DB4743FF','#F5AF4DFF',  '#DB4743FF','#F5AF4DFF', '#DB4743FF','#F5AF4DFF'), labels=c("unburned", "one year", "2-5 years")) +
+  labs(x="", y="Land surface temperature (Kelvin)") +
+  scale_x_discrete(labels= c("Unburned", "One", "One", "Two", "Two", "Three", "Three")) +
+    theme_bw() +
+  annotate("text", x = 2, y = 288.3, label = "*", color='#DB4743FF',  size = 10) +
+  annotate("text", x = 4, y = 288.9, label = "*", color='#DB4743FF',  size = 10) +
+  annotate("text", x = 6, y = 289.2, label = "*", color='#DB4743FF',  size = 10)
+  #theme(legend.position="none")
+
+allDataFit1Comp1
+```
+
+```{r}
+ggsave("../figures/LSTrecentBoreal2013-2022CompareOneTimeBurned.png", plot = allDataFit1Comp1, width = 8, height =6, units = c("in"), dpi=600, bg = "white" )
+```
+
+
+```{r}
+(recentLSTPlot = ggplot(data = dfemmfit1.1) + 
+  geom_point(aes(x=bTSF, y=mean, color = bTSF)) +
+  geom_errorbar(aes(x=bTSF, ymin = LCL, ymax = UCL, color = bTSF)) +
+  coord_flip() +
+  scale_color_manual(name= "Time Since Fire", values=c('#1b9e77','#d95f02','#7570b3',  '#d95f02','#7570b3', '#d95f02',  '#7570b3'), labels=c("Unburned", "One year", "2-5 years")) +
+  labs(x="Times burned", y="Land surface Temperature (Kelvin)") +
+  scale_x_discrete(labels= c("Unburned", "One", "One", "Two", "Two", "Three", "Three")) +
+    theme_bw() +
+   theme( legend.position="right", 
+        legend.text=element_text(size=14), 
+        legend.title=element_text(size=16),
+        legend.key = element_blank()) +
+    theme(axis.title.y = element_text(size = 16, hjust = 0.5, vjust = 1.1),
+          axis.title.x = element_text(size = 16, hjust = 0.5, vjust = 1.1),
+        axis.text.x = element_text(size = 14, color = "black"),
+        axis.text.y = element_text(size = 14, color = "black")) 
+)
+```
+
+```{r}
+ggsave("../figures/LSTrecentBoreal2013-2022CompareOneTimeBurnedPPTSlide.png", plot = recentLSTPlot, width = 8, height =6, units = c("in"), dpi=600, bg = "white" )
+```
+
+
+
+
+
+
+## Testing difference in means
+
+```{r}
+emmfit1
+```
+
+```{r}
+One_1 = c(1, 0, 0, 0, 0, 0, 0)
+One_2_5 = c(0, 1, 0, 0, 0, 0, 0)
+Three_1 = c(0, 0, 1, 0, 0, 0, 0)
+Three_2_5 = c(0, 0, 0, 1, 0, 0, 0)
+Two_1 = c(0, 0, 0, 0, 1, 0, 0)
+Two_2_5 = c(0, 0, 0, 0, 0, 1, 0)
+Unburned_0 = c(0, 0, 0, 0, 0, 0, 1) 
+```
+
+```{r}
+compUnburn = contrast(emmfit1, method = list("Unburned_0 - One_1" = Unburned_0 - One_1,
+                             "Unburned_0 - One_2_5" = Unburned_0 - One_2_5,
+                             "Unburned_0 - Two_1" = Unburned_0 - Two_1,
+                             "Unburned_0 - Two_2_5" = Unburned_0 - Two_2_5,
+                             "Unburned_0 - Three_1" = Unburned_0 - Three_1,
+                             "Unburned_0 - Three_2_5" = Unburned_0 - Three_2_5),
+         adjust = "mvt") %>%
+     confint()
+
+compUnburn
+```
+
+```{r}
+contrast(emmfit1, method = list("Unburned_0 - One_1" = Unburned_0 - One_1,
+                             "Unburned_0 - One_2_5" = Unburned_0 - One_2_5,
+                             "Unburned_0 - Two_1" = Unburned_0 - Two_1,
+                             "Unburned_0 - Two_2_5" = Unburned_0 - Two_2_5,
+                             "Unburned_0 - Three_1" = Unburned_0 - Three_1,
+                             "Unburned_0 - Three_2_5" = Unburned_0 - Three_2_5),
+         adjust = "mvt")
+```
+
+```{r}
+contrast(emmfit1, method = list("One_1 - Two_1" = One_1 - Two_1,
+                             "One_1 - Three_1" = One_1 - Three_1,
+                             "One_2_5 - Two_2_5" = One_2_5 - Two_2_5,
+                             "One_2_5 - Three_2_5" = One_2_5 - Three_2_5))
+```
+```{r}
+compTB = contrast(emmfit1, method = list("One_1 - Two_1" = One_1 - Two_1,
+                             "One_1 - Three_1" = One_1 - Three_1,
+                             "One_2_5 - Two_2_5" = One_2_5 - Two_2_5,
+                             "One_2_5 - Three_2_5" = One_2_5 - Three_2_5) ,
+         adjust = "mvt") %>%
+     confint()
+
+compTB
+```
+
+# Model All time steps since fire
+
+```{r}
+fit2 = glm(tempK ~ bTSF, data = lateTimeSteps, family = gaussian)
+```
+
+```{r}
+summary(fit2)
+```
+
+### Residuals: 
+
+```{r eval=FALSE, include=FALSE}
+recent$fit2.res = resid(fit2, type = "pearson")
+recent$fit2.fit = fitted(fit2)
+
+sum(residuals(fit2, type="pearson")^2)/fit2$df.res
+
+qplot(fitted(fit2), resid(fit2)) + theme_bw()
+
+```
+
+
+```{r}
+summary(fit2)
+```
+
+```{r}
+emmfit2 = emmeans(fit2, specs = ~ bTSF)
+emmfit2
+```
+
+```{r}
+unique(lateTimeSteps$bTSF)
+```
+
+```{r}
+dfemmfit2 = as.data.frame(emmfit2)
+
+dfemmfit2.1 = dfemmfit2 %>% mutate(mean=(emmean),
+                  SE=(SE),
+                  LCL=(lower.CL),
+                  UCL=(upper.CL),
+                  bTSF = factor(bTSF, levels = c("One_6-10", "One_10-19", "One_20-31", "Two_6-10", "Two_10-19", "Two_20-31", "Three_6-10", "Three_10-19", "Three_20-31")))
+
+dfemmfit2.1
+```
+
+#ECB100FF, #A10000FF, #7E605EFF, #FF4500FF, #994823FF, #4B4C4EFF, #572530FF, #000000FF
+```{r}
+lateDatafit2Plot = ggplot(data = dfemmfit2.1) + 
+  geom_point(aes(x=bTSF, y=mean, color = bTSF)) +
+  geom_errorbar(aes(x=bTSF, ymin = LCL, ymax = UCL, color = bTSF)) +
+  coord_flip() +
+  #scale_color_manual(name= "Time Since Fire", values=c('#7C873EFF','#DB4743FF', '#ECB100FF', '#A10000FF', '#7E605EFF', '#FF4500FF', '#994823FF', '#4B4C4EFF', '#572530FF', '#000000FF')) +
+  labs(x="", y="Land surface temperature (Kelvin)") +
+  #scale_x_discrete(labels= c("Unburned", "One", "One", "Two", "Two", "Three", "Three")) +
+    theme_bw() #+
+  #theme(legend.position="none")
+
+lateDatafit2Plot
+```
+
+
+
+
+
+
+
+
+
+
+
+# Model 2018 only DELETE
+```{r}
+model1 = glm(tempK ~ bTSF, data = recent, family = gaussian)
+```
+
+```{r}
+summary(model1)
+```
+
+### Residuals: 
+
+```{r}
+recent$model1.res = resid(model1, type = "pearson")
+recent$model1.fit = fitted(model1)
+
+sum(residuals(model1, type="pearson")^2)/model1$df.res
+
+qplot(fitted(model1), resid(model1)) + theme_bw()
+
+```
+
+```{r}
+
+```
+```{r}
+summary(model1)
+```
+
+```{r}
+emm1 = emmeans(model1, specs = ~ bTSF)
+emm1
+```
+```{r}
+dfemm1 = as.data.frame(emm1)
+
+dfemm1.1 = dfemm1 %>% mutate(mean=(emmean),
+                  SE=(SE),
+                  LCL=(lower.CL),
+                  UCL=(upper.CL),
+                  bTSF = factor(bTSF, levels = c("Unburned_0", 'One_1', 'One_2-5',  'Two_1', 'Two_2-5', 'Three_1','Three_2-5')))
+
+dfemm1.1
+```
+```{r}
+allDataPlot = ggplot(data = dfemm1.1) + 
+  geom_point(aes(x=bTSF, y=mean, color = bTSF)) +
+  geom_errorbar(aes(x=bTSF, ymin = LCL, ymax = UCL, color = bTSF)) +
+  coord_flip() +
+  scale_color_manual(name= "Time Since Fire", values=c('#1b9e77','#d95f02','#7570b3',  '#d95f02','#7570b3', '#d95f02',  '#7570b3'), labels=c("unburned", "one year", "2-5 years")) +
+  labs(x="", y="Albedo") +
+  scale_x_discrete(labels= c("Unburned", "One", "One", "Two", "Two", "Three", "Three")) +
+    theme_bw() #+
+  #theme(legend.position="none")
+
+allDataPlot
+```
+
+```{r}
+pairwise.t.test(recent$tempK, recent$bTSF, p.adjust.method="bonferroni")
+```
+
+```{r}
+emm1
+```
+```{r}
+pairs(emm1)
+```
+```{r}
+One_1 = c(1, 0, 0, 0, 0, 0, 0)
+One_2_5 = c(0, 1, 0, 0, 0, 0, 0)
+Three_1 = c(0, 0, 1, 0, 0, 0, 0)
+Three_2_5 = c(0, 0, 0, 1, 0, 0, 0)
+Two_1 = c(0, 0, 0, 0, 1, 0, 0)
+Two_2_5 = c(0, 0, 0, 0, 0, 1, 0)
+Unburned_0 = c(0, 0, 0, 0, 0, 0, 1) 
+```
+
+```{r}
+compUnburn = contrast(emm1, method = list("Unburned_0 - One_1" = Unburned_0 - One_1,
+                             "Unburned_0 - One_2_5" = Unburned_0 - One_2_5,
+                             "Unburned_0 - Two_1" = Unburned_0 - Two_1,
+                             "Unburned_0 - Two_2_5" = Unburned_0 - Two_2_5,
+                             "Unburned_0 - Three_1" = Unburned_0 - Three_1,
+                             "Unburned_0 - Three_2_5" = Unburned_0 - Three_2_5),
+         adjust = "mvt") %>%
+     confint()
+
+compUnburn
+```
+
+```{r}
+contrast(emm1, method = list("One_1 - Two_1" = One_1 - Two_1,
+                             "One_1 - Three_1" = One_1 - Three_1,
+                             "One_2_5 - Two_2_5" = One_2_5 - Two_2_5,
+                             "One_2_5 - Three_2_5" = One_2_5 - Three_2_5))
+```
+```{r}
+compTB = contrast(emm1, method = list("One_1 - Two_1" = One_1 - Two_1,
+                             "One_1 - Three_1" = One_1 - Three_1,
+                             "One_2_5 - Two_2_5" = One_2_5 - Two_2_5,
+                             "One_2_5 - Three_2_5" = One_2_5 - Three_2_5) ,
+         adjust = "mvt") %>%
+     confint()
+
+compTB
+```

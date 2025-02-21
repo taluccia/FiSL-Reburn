@@ -1,0 +1,929 @@
+---
+title: "2018 Western Canada Difference Test"
+author: "Anna Talucci"
+date: "2024-05-18"
+output: html_document
+---
+
+```{r clearenvironment, include=FALSE}
+rm(list=ls())
+```
+
+# Overview
+
+
+# Packages
+
+```{r}
+library(tidyverse)
+library(emmeans) 
+library(tweedie)
+library(statmod)
+library(car)
+
+library(MASS)
+library(cplm)
+library(aod)
+```
+
+
+# Data
+```{r}
+dfakca = read_csv("../data/samplePoints/cleanedSamplePoints/2018AlbedoSampleWesternCanadaAlaska.cvs")
+```
+
+```{r}
+df = read_csv("../data/samplePoints/cleanedSamplePoints/2018WesternCanada.cvs")
+```
+```{r}
+df
+```
+
+```{r}
+dfakca
+```
+
+# check factors
+
+```{r}
+df = df %>% mutate(TimeSinceFire= ordered(TimeSinceFire, levels = c("0", "1", "2-5", "6-10", "11-20", "21-31", "Other")),
+         burned = ordered(burned, levels = c("Unburned", "One", "Two", "Three", "other")))
+```
+ 
+```{r}
+dfakca = dfakca %>% mutate(TimeSinceFire= ordered(TimeSinceFire, levels = c("0", "1", "2-5", "6-10", "11-20", "21-31", "Other")),
+         burned = ordered(burned, levels = c("Unburned", "One", "Two", "Three", "other")))
+``` 
+ bTSF= ordered(bTSF, levels = c("Unburned_0", "One_1", "One_2-5", "Two_1", "Two_2-5", "Three_1","Three_2-5")),
+
+# Subset
+
+```{r}
+unique(df$TimeSinceFire)
+```
+
+
+
+```{r}
+(
+  dfrecent = df %>% 
+    filter(TimeSinceFire %in% c("0", "1", "2-5")) %>%
+    filter(albedo >0)
+    )
+```
+
+```{r}
+(
+ akcarecentForest = dfakca %>% 
+    filter(TimeSinceFire %in% c("0", "1", "2-5")) %>%
+    filter(albedo >0) %>%
+   filter(!ECO_NAME %in% c("Interior Yukon-Alaska alpine tundra", "Ogilvie-MacKenzie alpine tundra"))
+    )
+```
+
+```{r}
+unique(dfrecent$bTSF)
+```
+
+
+```{r}
+(
+ dfold = df %>% filter(TimeSinceFire %in% c("0", "6-10", "11-20", "21-31")) 
+    )
+```
+
+# Summarize by ecozone
+
+```{r}
+akcarecentForest %>% group_by(ECO_NAME) %>%summarize(n=n())
+```
+
+# Model recent NW Canada
+
+This section includes model, emeans calculations, graph, contrast calculations
+
+
+```{r}
+fit1 = glm(albedo ~ bTSF, data = dfrecent, family = tweedie(link.power=0, var.power=2))
+
+pro.tweediefit1 = tweedie.profile( fit1, p.vec = seq(1.2, 1.8, by = 0.1) )
+pro.tweediefit1$p.max
+pro.tweediefit1
+
+
+fit2 = glm(albedo ~ bTSF, data = dfrecent, family = tweedie(link.power=0,var.power=pro.tweediefit1$p.max))
+
+summary(fit2)
+```
+```{r}
+emm1 = emmeans(fit2, specs = ~ bTSF)
+emm1
+```
+```{r}
+dfemm1 = as.data.frame(emm1)
+
+dfemm1.1 = dfemm1 %>% mutate(meanResponseScale=plogis(emmean),
+                  SE=plogis(SE),
+                  LCL=plogis(asymp.LCL),
+                  UCL=plogis(asymp.UCL),
+                  bTSF = factor(bTSF, levels = c("Unburned_0", 'One_1', 'One_2-5',  'Two_1', 'Two_2-5', 'Three_1','Three_2-5')))
+
+dfemm1.1
+```
+```{r}
+allDataPlot = ggplot(data = dfemm1.1) + 
+  geom_point(aes(x=bTSF, y=meanResponseScale, color = bTSF)) +
+  geom_errorbar(aes(x=bTSF, ymin = LCL, ymax = UCL, color = bTSF)) +
+  coord_flip() +
+ scale_color_manual(name= "Time Since Fire", values=c('#1b9e77','#d95f02','#7570b3',  '#d95f02','#7570b3', '#d95f02',  '#7570b3'), labels=c("unburned", "one year", "2-5 years")) + 
+  labs(x="", y="Albedo") +
+  scale_x_discrete(labels= c("Unburned", "One", "One", "Two", "Two", "Three", "Three")) +
+    theme_bw() #+
+  #theme(legend.position="none")
+
+allDataPlot
+```
+
+```{r}
+ggsave("../figures/NwCanada2018ContrastAll.png", plot = allDataPlot, width = 8, height =6, units = c("in"), dpi=600, bg = "white" )
+```
+
+```{r}
+One_1 = c(1, 0, 0, 0, 0, 0, 0)
+One_2_5 = c(0, 1, 0, 0, 0, 0, 0)
+Three_1 = c(0, 0, 1, 0, 0, 0, 0)
+Three_2_5 = c(0, 0, 0, 1, 0, 0, 0)
+Two_1 = c(0, 0, 0, 0, 1, 0, 0)
+Two_2_5 = c(0, 0, 0, 0, 0, 1, 0)
+Unburned_0 = c(0, 0, 0, 0, 0, 0, 1) 
+```
+
+```{r}
+compUnburn = contrast(emm1, method = list("Unburned_0 - One_1" = Unburned_0 - One_1,
+                             "Unburned_0 - One_2_5" = Unburned_0 - One_2_5,
+                             "Unburned_0 - Two_1" = Unburned_0 - Two_1,
+                             "Unburned_0 - Two_2_5" = Unburned_0 - Two_2_5,
+                             "Unburned_0 - Three_1" = Unburned_0 - Three_1,
+                             "Unburned_0 - Three_2_5" = Unburned_0 - Three_2_5),
+         adjust = "mvt") %>%
+     confint()
+
+compUnburn
+```
+
+```{r}
+contrast(emm1, method = list("One_1 - Two_1" = One_1 - Two_1,
+                             "One_1 - Three_1" = One_1 - Three_1,
+                             "One_2_5 - Two_2_5" = One_2_5 - Two_2_5,
+                             "One_2_5 - Three_2_5" = One_2_5 - Three_2_5))
+```
+```{r}
+compTB = contrast(emm1, method = list("One_1 - Two_1" = One_1 - Two_1,
+                             "One_1 - Three_1" = One_1 - Three_1,
+                             "One_2_5 - Two_2_5" = One_2_5 - Two_2_5,
+                             "One_2_5 - Three_2_5" = One_2_5 - Three_2_5) ,
+         adjust = "mvt") %>%
+     confint()
+
+compTB
+```
+
+### Residuals: 
+
+```{r}
+dfrecent$fit2.res = resid(fit2, type = "pearson")
+dfrecent$fit2.fit = fitted(fit2)
+
+sum(residuals(fit2, type="pearson")^2)/fit2$df.res
+
+qplot(fitted(fit2), resid(fit2)) + theme_bw()
+
+```
+
+### Drop-in-deviance Test: 
+
+In order to conduct a drop in deviance test for to assess the significance of the interaction term, we need to generate a model without the interaction term using the tweedie distribution.
+```{r }
+fit3 = glm(albedo ~ bTSF + shldPln, data = dfrecent, 
+             family = tweedie(link.power=0, var.power=2))
+
+pro.tweediefit3 = tweedie.profile( fit3, p.vec = seq(1.2, 1.8, by = 0.1) )
+pro.tweediefit3$p.max
+pro.tweediefit3$ci
+
+
+fit4 = glm(albedo ~ bTSF + shldPln, data = dfrecent,
+                family = tweedie(link.power=0, var.power=pro.tweediefit3$p.max))
+```
+
+Drop in deviance test for the interaction term. For tweedie distribution we must specify the type of test as "chisq" for a chi-squared test.
+```{r}
+
+anova(fit4, fit2, test = "Chisq")
+```
+
+### Estimates & CI: Percent uncharred (BOM)
+
+Back transform to the original scale (tweedie link function = log). The Tweedie package does not have a function to extract CI. We will manually calculate estimated CI based on SE. 
+
+
+First, extract estimate and exponentiate back to the original scale
+```{r}
+( fit2.est = as.data.frame(summary(fit2)$coefficients[, 1] ))
+```
+
+Inverse link back to the original scale of the data with plogis() function. Plogis() function provides the probabilities for the estimate.
+```{r}
+( fit2.estorg = exp(fit2.est) )
+```
+
+Extract SE 
+```{r}
+( fit2.se = summary(fit2)$coefficients[, 2] )
+```
+
+Reverse transform SE back to original scale
+```{r}
+( fit2.se.org = exp(fit2.se))
+```
+
+Calculate CI for the model then inverse link back to the original scale
+```{r}
+( fit2.upper = exp(fit2.est + (fit2.se * 1.96)) )
+
+( fit2.lower = exp(fit2.est - (fit2.se * 1.96)) )
+```
+albedo ~ bTSF, data = dfrecent, 
+```{r}
+
+fit1_t <- aov(albedo ~ bTSF, data = dfrecent)
+
+#view model output
+summary(fit1_t)
+```
+
+```{r}
+pairwise.t.test(dfrecent$albedo, dfrecent$bTSF, p.adjust.method="bonferroni")
+```
+
+
+```{r}
+plainsDataPlot = ggplot(data = dfplainsemm1.1) + 
+  geom_point(aes(x=bTSF, y=meanResponseScale, color = bTSF)) +
+  geom_errorbar(aes(x=bTSF, ymin = LCL, ymax = UCL, color = bTSF)) +
+  coord_flip() +
+  scale_color_manual(name= "Time Since Fire", values=c('#1b9e77','#d95f02','#7570b3',  '#d95f02','#7570b3', '#d95f02',  '#7570b3'), labels=c("unburned", "one year", "2-5 years")) +
+  labs(x="", y="Albedo") +
+  scale_x_discrete(labels= c("Unburned", "One", "One", "Two", "Two", "Three", "Three")) +
+    theme_bw() #+
+  #theme(legend.position="none")
+
+plainsDataPlot
+```
+
+```{r}
+ggsave("../figures/skContrastPlains.png", plot = plainsDataPlot, width = 8, height =6, units = c("in"), dpi=600, bg = "white" )
+```
+
+```{r}
+One_1 = c(1, 0, 0, 0, 0, 0, 0)
+One_2_5 = c(0, 1, 0, 0, 0, 0, 0)
+Three_1 = c(0, 0, 1, 0, 0, 0, 0)
+Three_2_5 = c(0, 0, 0, 1, 0, 0, 0)
+Two_1 = c(0, 0, 0, 0, 1, 0, 0)
+Two_2_5 = c(0, 0, 0, 0, 0, 1, 0)
+Unburned_0 = c(0, 0, 0, 0, 0, 0, 1) 
+```
+
+```{r}
+compUnburn = contrast(plainsemm1, method = list("Unburned_0 - One_1" = Unburned_0 - One_1,
+                             "Unburned_0 - One_2_5" = Unburned_0 - One_2_5,
+                             "Unburned_0 - Two_1" = Unburned_0 - Two_1,
+                             "Unburned_0 - Two_2_5" = Unburned_0 - Two_2_5,
+                             "Unburned_0 - Three_1" = Unburned_0 - Three_1,
+                             "Unburned_0 - Three_2_5" = Unburned_0 - Three_2_5),
+         adjust = "mvt") %>%
+     confint()
+
+compUnburn
+```
+
+```{r}
+contrast(plainsemm1, method = list("One_1 - Two_1" = One_1 - Two_1,
+                             "One_1 - Three_1" = One_1 - Three_1,
+                             "One_2_5 - Two_2_5" = One_2_5 - Two_2_5,
+                             "One_2_5 - Three_2_5" = One_2_5 - Three_2_5))
+```
+```{r}
+compTB = contrast(plainsemm1, method = list("One_1 - Two_1" = One_1 - Two_1,
+                             "One_1 - Three_1" = One_1 - Three_1,
+                             "One_2_5 - Two_2_5" = One_2_5 - Two_2_5,
+                             "One_2_5 - Three_2_5" = One_2_5 - Three_2_5) ,
+         adjust = "mvt") %>%
+     confint()
+
+compTB
+```
+
+### Residuals: 
+
+```{r}
+plains$fit2.res = resid(fit2, type = "pearson")
+plains$fit2.fit = fitted(fit2)
+
+sum(residuals(fit2, type="pearson")^2)/fit2$df.res
+
+qplot(fitted(fit2), resid(fit2)) + theme_bw()
+
+```
+
+### Drop-in-deviance Test: Percent uncharred (BOM)
+
+In order to conduct a drop in deviance test for to assess the significance of the interaction term, we need to generate a model without the interaction term using the tweedie distribution.
+```{r }
+fit3 = glm(albedo ~ bTSF + shldPln, data = dfrecent, 
+             family = tweedie(link.power=0, var.power=2))
+
+pro.tweediefit3 = tweedie.profile( fit3, p.vec = seq(1.2, 1.8, by = 0.1) )
+pro.tweediefit3$p.max
+pro.tweediefit3$ci
+
+
+fit4 = glm(albedo ~ bTSF + shldPln, data = dfrecent,
+                family = tweedie(link.power=0, var.power=pro.tweediefit3$p.max))
+```
+
+Drop in deviance test for the interaction term. For tweedie distribution we must specify the type of test as "chisq" for a chi-squared test.
+```{r}
+
+anova(fit4, fit2, test = "Chisq")
+```
+
+### Estimates & CI: Percent uncharred (BOM)
+
+Back transform to the original scale (tweedie link function = log). The Tweedie package does not have a function to extract CI. We will manually calculate estimated CI based on SE. 
+
+
+First, extract estimate and exponentiate back to the original scale
+```{r}
+( fit2.est = as.data.frame(summary(fit2)$coefficients[, 1] ))
+```
+
+Inverse link back to the original scale of the data with plogis() function. Plogis() function provides the probabilities for the estimate.
+```{r}
+( fit2.estorg = exp(fit2.est) )
+```
+
+Extract SE 
+```{r}
+( fit2.se = summary(fit2)$coefficients[, 2] )
+```
+
+Reverse transform SE back to original scale
+```{r}
+( fit2.se.org = exp(fit2.se))
+```
+
+Calculate CI for the model then inverse link back to the original scale
+```{r}
+( fit2.upper = exp(fit2.est + (fit2.se * 1.96)) )
+
+( fit2.lower = exp(fit2.est - (fit2.se * 1.96)) )
+```
+albedo ~ bTSF, data = dfrecent, 
+```{r}
+
+fit1_t <- aov(albedo ~ bTSF, data = dfrecent)
+
+#view model output
+summary(fit1_t)
+```
+
+```{r}
+pairwise.t.test(dfrecent$albedo, dfrecent$bTSF, p.adjust.method="bonferroni")
+```
+
+
+# Model Forest
+
+
+
+```{r}
+akcarecentForest1 = glm(albedo ~ bTSF, data = akcarecentForest, family = tweedie(link.power=0, var.power=2))
+
+pro.tweedieakcarecentForest1 = tweedie.profile( akcarecentForest1, p.vec = seq(1.2, 1.8, by = 0.1) )
+pro.tweedieakcarecentForest1$p.max
+pro.tweedieakcarecentForest1
+
+
+akcarecentForest2 = glm(albedo ~ bTSF, data = akcarecentForest, family = tweedie(link.power=0,var.power=pro.tweedieakcarecentForest1$p.max))
+
+summary(akcarecentForest2)
+```
+```{r}
+akcarecentForestemm1 = emmeans(akcarecentForest2, specs = ~ bTSF)
+akcarecentForestemm1
+```
+
+```{r}
+akcarecentForestemm1.1 = as.data.frame(akcarecentForestemm1)
+
+akcarecentForestemm1.2 = akcarecentForestemm1.1 %>% mutate(meanResponseScale=plogis(emmean),
+                  SE=plogis(SE),
+                  LCL=plogis(asymp.LCL),
+                  UCL=plogis(asymp.UCL),
+                  bTSF = factor(bTSF, levels = c("Unburned_0", 'One_1', 'One_2-5',  'Two_1', 'Two_2-5', 'Three_1',  'Three_2-5')),
+                  burned= c("One", "One", "Two", "Two", "Three", "Three", "Unburned"))
+
+akcarecentForestemm1.2
+```
+```{r}
+(akcarecentForestDataPlot = ggplot(data = akcarecentForestemm1.2) + 
+  geom_point(aes(x=bTSF, y=meanResponseScale, color = bTSF)) +
+  geom_errorbar(aes(x=bTSF, ymin = LCL, ymax = UCL, color = bTSF)) +
+  coord_flip() +
+  scale_color_manual(name= "Time Since Fire", values=c('#1b9e77','#d95f02','#7570b3',  '#d95f02','#7570b3', '#d95f02',  '#7570b3'), labels=c("Unburned", "One year", "2-5 years")) +
+  labs(x="Times burned", y="Albedo") +
+  scale_x_discrete(labels= c("Unburned", "One", "One", "Two", "Two", "Three", "Three")) +
+    theme_bw() +
+   theme( legend.position="right", 
+        legend.text=element_text(size=14), 
+        legend.title=element_text(size=16),
+        legend.key = element_blank()) +
+    theme(axis.title.y = element_text(size = 16, hjust = 0.5, vjust = 1.1),
+          axis.title.x = element_text(size = 16, hjust = 0.5, vjust = 1.1),
+        axis.text.x = element_text(size = 14, color = "black"),
+        axis.text.y = element_text(size = 14, color = "black")) 
+)
+```
+
+```{r eval=FALSE, include=FALSE}
+ggsave("../figures/WesternCanAndAKContrast2018Poster.png", plot = akcarecentForestDataPlot, width = 8, height =6, units = c("in"), dpi=600, bg = "white" )
+```
+
+```{r}
+One_1 = c(1, 0, 0, 0, 0, 0, 0)
+One_2_5 = c(0, 1, 0, 0, 0, 0, 0)
+Three_1 = c(0, 0, 1, 0, 0, 0, 0)
+Three_2_5 = c(0, 0, 0, 1, 0, 0, 0)
+Two_1 = c(0, 0, 0, 0, 1, 0, 0)
+Two_2_5 = c(0, 0, 0, 0, 0, 1, 0)
+Unburned_0 = c(0, 0, 0, 0, 0, 0, 1) 
+```
+
+```{r}
+compUnburn = contrast(akcarecentForestemm1, method = list("Unburned_0 - One_1" = Unburned_0 - One_1,
+                             "Unburned_0 - One_2_5" = Unburned_0 - One_2_5,
+                             "Unburned_0 - Two_1" = Unburned_0 - Two_1,
+                             "Unburned_0 - Two_2_5" = Unburned_0 - Two_2_5,
+                             "Unburned_0 - Three_1" = Unburned_0 - Three_1,
+                             "Unburned_0 - Three_2_5" = Unburned_0 - Three_2_5),
+         adjust = "mvt") %>%
+     confint()
+
+compUnburn
+```
+
+```{r}
+contrast(akcarecentForestemm1, method = list("One_1 - Two_1" = One_1 - Two_1,
+                             "One_1 - Three_1" = One_1 - Three_1,
+                             "One_2_5 - Two_2_5" = One_2_5 - Two_2_5,
+                             "One_2_5 - Three_2_5" = One_2_5 - Three_2_5))
+```
+```{r}
+compTB = contrast(shieldemm1, method = list("One_1 - Two_1" = One_1 - Two_1,
+                             "One_1 - Three_1" = One_1 - Three_1,
+                             "One_2_5 - Two_2_5" = One_2_5 - Two_2_5,
+                             "One_2_5 - Three_2_5" = One_2_5 - Three_2_5) ,
+         adjust = "mvt") %>%
+     confint()
+
+compTB
+```
+
+### Residuals: 
+
+```{r}
+plains$fit2.res = resid(fit2, type = "pearson")
+plains$fit2.fit = fitted(fit2)
+
+sum(residuals(fit2, type="pearson")^2)/fit2$df.res
+
+qplot(fitted(fit2), resid(fit2)) + theme_bw()
+
+```
+
+### Drop-in-deviance Test: Percent uncharred (BOM)
+
+In order to conduct a drop in deviance test for to assess the significance of the interaction term, we need to generate a model without the interaction term using the tweedie distribution.
+```{r }
+fit3 = glm(albedo ~ bTSF + shldPln, data = akcarecentForest, 
+             family = tweedie(link.power=0, var.power=2))
+
+pro.tweediefit3 = tweedie.profile( fit3, p.vec = seq(1.2, 1.8, by = 0.1) )
+pro.tweediefit3$p.max
+pro.tweediefit3$ci
+
+
+fit4 = glm(albedo ~ bTSF + shldPln, data = akcarecentForest,
+                family = tweedie(link.power=0, var.power=pro.tweediefit3$p.max))
+```
+
+Drop in deviance test for the interaction term. For tweedie distribution we must specify the type of test as "chisq" for a chi-squared test.
+```{r}
+
+anova(fit4, fit2, test = "Chisq")
+```
+
+### Estimates & CI: Percent uncharred (BOM)
+
+Back transform to the original scale (tweedie link function = log). The Tweedie package does not have a function to extract CI. We will manually calculate estimated CI based on SE. 
+
+
+First, extract estimate and exponentiate back to the original scale
+```{r}
+( fit2.est = as.data.frame(summary(fit2)$coefficients[, 1] ))
+```
+
+Inverse link back to the original scale of the data with plogis() function. Plogis() function provides the probabilities for the estimate.
+```{r}
+( fit2.estorg = exp(fit2.est) )
+```
+
+Extract SE 
+```{r}
+( fit2.se = summary(fit2)$coefficients[, 2] )
+```
+
+Reverse transform SE back to original scale
+```{r}
+( fit2.se.org = exp(fit2.se))
+```
+
+Calculate CI for the model then inverse link back to the original scale
+```{r}
+( fit2.upper = exp(fit2.est + (fit2.se * 1.96)) )
+
+( fit2.lower = exp(fit2.est - (fit2.se * 1.96)) )
+```
+
+```{r}
+
+fit1_t <- aov(albedo ~ bTSF, data = akcarecentForest)
+
+#view model output
+summary(fit1_t)
+```
+
+```{r}
+pairwise.t.test(akcarecentForest$albedo, akcarecentForest$bTSF, p.adjust.method="bonferroni")
+```
+
+
+
+
+# Model Forest AK
+
+```{r}
+( ca = akcarecentForest %>% filter(sample=="CAN"))
+( ak = akcarecentForest %>% filter(sample=="AK"))
+```
+
+
+```{r}
+ak1 = glm(albedo ~ bTSF, data = ak, family = tweedie(link.power=0, var.power=2))
+
+pro.tweedieak1 = tweedie.profile( ak1, p.vec = seq(1.2, 1.8, by = 0.1) )
+pro.tweedieak1$p.max
+pro.tweedieak1
+
+
+ak2 = glm(albedo ~ bTSF, data = ak, family = tweedie(link.power=0,var.power=pro.tweedieak1$p.max))
+
+summary(ak2)
+```
+```{r}
+akemm1 = emmeans(ak2, specs = ~ bTSF)
+akemm1
+```
+
+```{r}
+akemm1 = as.data.frame(akemm1)
+
+akemm1.1 = akemm1 %>% mutate(meanResponseScale=plogis(emmean),
+                  SE=plogis(SE),
+                  LCL=plogis(asymp.LCL),
+                  UCL=plogis(asymp.UCL),
+                  bTSF = factor(bTSF, levels = c("Unburned_0", 'One_1', 'One_2-5',  'Two_1', 'Two_2-5', 'Three_1',  'Three_2-5')),
+                  burned= c("One", "One", "Two", "Two", "Three", "Three", "Unburned"))
+
+akemm1.1
+```
+```{r}
+(akDataPlot = ggplot(data = akemm1.1) + 
+  geom_point(aes(x=bTSF, y=meanResponseScale, color = bTSF)) +
+  geom_errorbar(aes(x=bTSF, ymin = LCL, ymax = UCL, color = bTSF)) +
+  coord_flip() +
+  scale_color_manual(name= "Time Since Fire", values=c('#1b9e77','#d95f02','#7570b3',  '#d95f02','#7570b3', '#d95f02',  '#7570b3'), labels=c("unburned", "one year", "2-5 years")) +
+  labs(x="Times burned", y="Albedo") +
+  scale_x_discrete(labels= c("Unburned", "One", "One", "Two", "Two", "Three", "Three")) +
+    theme_bw() 
+)
+```
+
+```{r eval=FALSE, include=FALSE}
+ggsave("../figures/WesternCanContrast2018.png", plot = shieldDataPlot, width = 8, height =6, units = c("in"), dpi=600, bg = "white" )
+```
+
+```{r}
+One_1 = c(1, 0, 0, 0, 0, 0, 0)
+One_2_5 = c(0, 1, 0, 0, 0, 0, 0)
+Three_1 = c(0, 0, 1, 0, 0, 0, 0)
+Three_2_5 = c(0, 0, 0, 1, 0, 0, 0)
+Two_1 = c(0, 0, 0, 0, 1, 0, 0)
+Two_2_5 = c(0, 0, 0, 0, 0, 1, 0)
+Unburned_0 = c(0, 0, 0, 0, 0, 0, 1) 
+```
+
+```{r}
+compUnburn = contrast(akemm1.1, method = list("Unburned_0 - One_1" = Unburned_0 - One_1,
+                             "Unburned_0 - One_2_5" = Unburned_0 - One_2_5,
+                             "Unburned_0 - Two_1" = Unburned_0 - Two_1,
+                             "Unburned_0 - Two_2_5" = Unburned_0 - Two_2_5,
+                             "Unburned_0 - Three_1" = Unburned_0 - Three_1,
+                             "Unburned_0 - Three_2_5" = Unburned_0 - Three_2_5),
+         adjust = "mvt") %>%
+     confint()
+
+compUnburn
+```
+
+```{r}
+contrast(akemm1, method = list("One_1 - Two_1" = One_1 - Two_1,
+                             "One_1 - Three_1" = One_1 - Three_1,
+                             "One_2_5 - Two_2_5" = One_2_5 - Two_2_5,
+                             "One_2_5 - Three_2_5" = One_2_5 - Three_2_5))
+```
+```{r}
+compTB = contrast(akemm1, method = list("One_1 - Two_1" = One_1 - Two_1,
+                             "One_1 - Three_1" = One_1 - Three_1,
+                             "One_2_5 - Two_2_5" = One_2_5 - Two_2_5,
+                             "One_2_5 - Three_2_5" = One_2_5 - Three_2_5) ,
+         adjust = "mvt") %>%
+     confint()
+
+compTB
+```
+
+### Residuals: 
+
+```{r}
+plains$fit2.res = resid(fit2, type = "pearson")
+plains$fit2.fit = fitted(fit2)
+
+sum(residuals(fit2, type="pearson")^2)/fit2$df.res
+
+qplot(fitted(fit2), resid(fit2)) + theme_bw()
+
+```
+
+### Drop-in-deviance Test: Percent uncharred (BOM)
+
+In order to conduct a drop in deviance test for to assess the significance of the interaction term, we need to generate a model without the interaction term using the tweedie distribution.
+```{r }
+fit3 = glm(albedo ~ bTSF + shldPln, data = ak, 
+             family = tweedie(link.power=0, var.power=2))
+
+pro.tweediefit3 = tweedie.profile( fit3, p.vec = seq(1.2, 1.8, by = 0.1) )
+pro.tweediefit3$p.max
+pro.tweediefit3$ci
+
+
+fit4 = glm(albedo ~ bTSF + shldPln, data = ak,
+                family = tweedie(link.power=0, var.power=pro.tweediefit3$p.max))
+```
+
+Drop in deviance test for the interaction term. For tweedie distribution we must specify the type of test as "chisq" for a chi-squared test.
+```{r}
+
+anova(fit4, fit2, test = "Chisq")
+```
+
+### Estimates & CI: Percent uncharred (BOM)
+
+Back transform to the original scale (tweedie link function = log). The Tweedie package does not have a function to extract CI. We will manually calculate estimated CI based on SE. 
+
+
+First, extract estimate and exponentiate back to the original scale
+```{r}
+( fit2.est = as.data.frame(summary(fit2)$coefficients[, 1] ))
+```
+
+Inverse link back to the original scale of the data with plogis() function. Plogis() function provides the probabilities for the estimate.
+```{r}
+( fit2.estorg = exp(fit2.est) )
+```
+
+Extract SE 
+```{r}
+( fit2.se = summary(fit2)$coefficients[, 2] )
+```
+
+Reverse transform SE back to original scale
+```{r}
+( fit2.se.org = exp(fit2.se))
+```
+
+Calculate CI for the model then inverse link back to the original scale
+```{r}
+( fit2.upper = exp(fit2.est + (fit2.se * 1.96)) )
+
+( fit2.lower = exp(fit2.est - (fit2.se * 1.96)) )
+```
+
+```{r}
+
+fit1_t <- aov(albedo ~ bTSF, data = ak)
+
+#view model output
+summary(fit1_t)
+```
+
+```{r}
+pairwise.t.test(ak$albedo, ak$bTSF, p.adjust.method="bonferroni")
+```
+
+
+
+
+# Model Forest ca
+
+
+
+
+```{r}
+ca1 = glm(albedo ~ bTSF, data = ca, family = tweedie(link.power=0, var.power=2))
+
+pro.tweedieca1 = tweedie.profile( ca1, p.vec = seq(1.2, 1.8, by = 0.1) )
+pro.tweedieca1$p.max
+pro.tweedieca1
+
+
+ca2 = glm(albedo ~ bTSF, data = ca, family = tweedie(link.power=0,var.power=pro.tweedieca1$p.max))
+
+summary(ca2)
+```
+```{r}
+caemm1 = emmeans(ca2, specs = ~ bTSF)
+caemm1
+```
+
+```{r}
+caemm1 = as.data.frame(caemm1)
+
+caemm1.1 = caemm1 %>% mutate(meanResponseScale=plogis(emmean),
+                  SE=plogis(SE),
+                  LCL=plogis(asymp.LCL),
+                  UCL=plogis(asymp.UCL),
+                  bTSF = factor(bTSF, levels = c("Unburned_0", 'One_1', 'One_2-5',  'Two_1', 'Two_2-5', 'Three_1',  'Three_2-5')),
+                  burned= c("One", "One", "Two", "Two", "Three", "Three", "Unburned"))
+
+caemm1.1
+```
+```{r}
+(caDataPlot = ggplot(data = caemm1.1) + 
+  geom_point(aes(x=bTSF, y=meanResponseScale, color = bTSF)) +
+  geom_errorbar(aes(x=bTSF, ymin = LCL, ymax = UCL, color = bTSF)) +
+  coord_flip() +
+  scale_color_manual(name= "Time Since Fire", values=c('#1b9e77','#d95f02','#7570b3',  '#d95f02','#7570b3', '#d95f02',  '#7570b3'), labels=c("unburned", "one year", "2-5 years")) +
+  labs(x="Times burned", y="Albedo") +
+  scale_x_discrete(labels= c("Unburned", "One", "One", "Two", "Two", "Three", "Three")) +
+    theme_bw() 
+)
+```
+
+```{r eval=FALSE, include=FALSE}
+ggsave("../figures/WesternCanContrast2018.png", plot = shieldDataPlot, width = 8, height =6, units = c("in"), dpi=600, bg = "white" )
+```
+
+```{r}
+One_1 = c(1, 0, 0, 0, 0, 0, 0)
+One_2_5 = c(0, 1, 0, 0, 0, 0, 0)
+Three_1 = c(0, 0, 1, 0, 0, 0, 0)
+Three_2_5 = c(0, 0, 0, 1, 0, 0, 0)
+Two_1 = c(0, 0, 0, 0, 1, 0, 0)
+Two_2_5 = c(0, 0, 0, 0, 0, 1, 0)
+Unburned_0 = c(0, 0, 0, 0, 0, 0, 1) 
+```
+
+```{r}
+compUnburn = contrast(shieldemm1, method = list("Unburned_0 - One_1" = Unburned_0 - One_1,
+                             "Unburned_0 - One_2_5" = Unburned_0 - One_2_5,
+                             "Unburned_0 - Two_1" = Unburned_0 - Two_1,
+                             "Unburned_0 - Two_2_5" = Unburned_0 - Two_2_5,
+                             "Unburned_0 - Three_1" = Unburned_0 - Three_1,
+                             "Unburned_0 - Three_2_5" = Unburned_0 - Three_2_5),
+         adjust = "mvt") %>%
+     confint()
+
+compUnburn
+```
+
+```{r}
+contrast(shieldemm1, method = list("One_1 - Two_1" = One_1 - Two_1,
+                             "One_1 - Three_1" = One_1 - Three_1,
+                             "One_2_5 - Two_2_5" = One_2_5 - Two_2_5,
+                             "One_2_5 - Three_2_5" = One_2_5 - Three_2_5))
+```
+```{r}
+compTB = contrast(shieldemm1, method = list("One_1 - Two_1" = One_1 - Two_1,
+                             "One_1 - Three_1" = One_1 - Three_1,
+                             "One_2_5 - Two_2_5" = One_2_5 - Two_2_5,
+                             "One_2_5 - Three_2_5" = One_2_5 - Three_2_5) ,
+         adjust = "mvt") %>%
+     confint()
+
+compTB
+```
+
+### Residuals: 
+
+```{r}
+plains$fit2.res = resid(fit2, type = "pearson")
+plains$fit2.fit = fitted(fit2)
+
+sum(residuals(fit2, type="pearson")^2)/fit2$df.res
+
+qplot(fitted(fit2), resid(fit2)) + theme_bw()
+
+```
+
+### Drop-in-deviance Test: Percent uncharred (BOM)
+
+In order to conduct a drop in deviance test for to assess the significance of the interaction term, we need to generate a model without the interaction term using the tweedie distribution.
+```{r }
+fit3 = glm(albedo ~ bTSF + shldPln, data = ca, 
+             family = tweedie(link.power=0, var.power=2))
+
+pro.tweediefit3 = tweedie.profile( fit3, p.vec = seq(1.2, 1.8, by = 0.1) )
+pro.tweediefit3$p.max
+pro.tweediefit3$ci
+
+
+fit4 = glm(albedo ~ bTSF + shldPln, data = ca,
+                family = tweedie(link.power=0, var.power=pro.tweediefit3$p.max))
+```
+
+Drop in deviance test for the interaction term. For tweedie distribution we must specify the type of test as "chisq" for a chi-squared test.
+```{r}
+
+anova(fit4, fit2, test = "Chisq")
+```
+
+### Estimates & CI: Percent uncharred (BOM)
+
+Back transform to the original scale (tweedie link function = log). The Tweedie package does not have a function to extract CI. We will manually calculate estimated CI based on SE. 
+
+
+First, extract estimate and exponentiate back to the original scale
+```{r}
+( fit2.est = as.data.frame(summary(fit2)$coefficients[, 1] ))
+```
+
+Inverse link back to the original scale of the data with plogis() function. Plogis() function provides the probabilities for the estimate.
+```{r}
+( fit2.estorg = exp(fit2.est) )
+```
+
+Extract SE 
+```{r}
+( fit2.se = summary(fit2)$coefficients[, 2] )
+```
+
+Reverse transform SE back to original scale
+```{r}
+( fit2.se.org = exp(fit2.se))
+```
+
+Calculate CI for the model then inverse link back to the original scale
+```{r}
+( fit2.upper = exp(fit2.est + (fit2.se * 1.96)) )
+
+( fit2.lower = exp(fit2.est - (fit2.se * 1.96)) )
+```
+
+```{r}
+
+fit1_t <- aov(albedo ~ bTSF, data = ca)
+
+#view model output
+summary(fit1_t)
+```
+
+```{r}
+pairwise.t.test(ca$albedo, ca$bTSF, p.adjust.method="bonferroni")
+```
+
+
+
+
