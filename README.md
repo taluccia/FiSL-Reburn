@@ -11,3 +11,12 @@ Modis albedo product https://www.umb.edu/spectralmass/v006/mcd43a3-albedo-produc
 Landsat Collection 2 Surface Temperature https://www.usgs.gov/landsat-missions/landsat-collection-2-surface-temperature
 
 Arset EE code for LST https://appliedsciences.nasa.gov/get-involved/training/english/arset-satellite-remote-sensing-measuring-urban-heat-islands-and
+
+# Data Viz
+
+https://r-graph-gallery.com/color-palette-finder
+#FED789FF, #023743FF, #72874EFF, #476F84FF, #A4BED5FF, #453947FF
+
+
+# Scripts
+
