@@ -1,0 +1,222 @@
+---
+title: "Organize Data LST"
+author: "Anna Talucci"
+date: "2024-10-10"
+output: html_document
+---
+
+# Packages
+```{r}
+library(tidyverse)
+library(sf)
+```
+
+# Data
+
+```{r}
+lst = read.csv("../data/eeSampledData/lst/sampleLstSK.csv")
+```
+
+```{r}
+lstAk = read.csv("../data/eeSampledData/lst/sampleLstAK2018.csv")
+```
+
+```{r}
+lstCan = read.csv("../data/eeSampledData/lst/sampleLstCan2018.csv")
+```
+
+```{r}
+reburn = read_csv("../data/samplePoints/cleanedSamplePoints/skStratifiedSample1k20180213v2.cvs")
+```
+
+# Dataframes
+
+```{r}
+lst
+lstAk
+lstCan
+```
+
+
+```{r}
+names(lst)
+names(lstAk)
+names(lstCan)
+```
+
+```{r}
+names(reburn)
+```
+# Organize data
+
+
+
+```{r}
+lst
+```
+
+
+```{r}
+sort(unique(lst$burned))
+
+```
+
+```{r}
+lst
+```
+
+```{r}
+
+( lstPts = lst %>% 
+  dplyr::select(-ID, -.geo) %>% 
+  rename(systemId = system.index) %>%
+  filter(burned %in% c("One", "Three", "Two", "Unburned")) %>%
+  dplyr::select(systemId:lon, shldPln:tsfYr) )
+```
+
+```{r}
+( lstLong = lst %>% 
+  dplyr::select(system.index, burned, lat:lon, max_2013:min_2022) %>% 
+  rename(systemId = system.index) %>%
+  filter(burned %in% c("One", "Three", "Two", "Unburned")) %>%
+  pivot_longer(
+  cols = max_2013:min_2022,
+  names_to = "statYr",
+  values_to = "tempK") %>% 
+  separate(statYr, c("lstStat", "lstYr")) %>%
+  mutate(albedYr = as.numeric(lstYr)) %>%
+  left_join(., lstPts, by = c("systemId", "albedYr")) %>%
+  drop_na(ECO_NAM) %>%
+    dplyr::select(-lat.y, -lon.y, -burned.y) %>%
+    rename(lat=lat.x, lon=lon.x, burned=burned.x, tsfClass = TmSncFr) %>%
+    mutate(bTSF = paste0(burned,"_",tsfClass))
+)
+  
+```
+
+
+```{r}
+( lstStats = lstLong %>% pivot_wider(names_from = lstStat, values_from = tempK) %>% filter(tsfClass %in% c("0", "1", "2-5")))
+```
+```{r}
+lstStats$tsfClass = factor(lstStats$tsfClass, levels = c( "0", "1", "2-5"))
+lstStats$burned = factor(lstStats$burned, levels = c( "Unburned", "One", "Two", "Three"))
+```
+
+```{r}
+unique(lstStats$tsfClass)  
+unique(lstStats$burned)  
+```
+Gaussian
+
+```{r}
+( recent = lstLong %>% filter(tsfClass %in% c("0", "1", "2-5")) %>% filter(burned %in% c("Unburned", "One", "Two", "Three")) )
+```
+```{r}
+model1 = glm(tempK ~ bTSF, data = recent, family = gaussian)
+```
+
+```{r}
+summary(model1)
+```
+
+### Residuals: 
+
+```{r}
+recent$model1.res = resid(model1, type = "pearson")
+recent$model1.fit = fitted(model1)
+
+sum(residuals(model1, type="pearson")^2)/model1$df.res
+
+qplot(fitted(model1), resid(model1)) + theme_bw()
+
+```
+
+```{r}
+
+```
+```{r}
+summary(model1)
+```
+
+```{r}
+emm1 = emmeans(model1, specs = ~ bTSF)
+emm1
+```
+```{r}
+dfemm1 = as.data.frame(emm1)
+
+dfemm1.1 = dfemm1 %>% mutate(mean=(emmean),
+                  SE=(SE),
+                  LCL=(lower.CL),
+                  UCL=(upper.CL),
+                  bTSF = factor(bTSF, levels = c("Unburned_0", 'One_1', 'One_2-5',  'Two_1', 'Two_2-5', 'Three_1','Three_2-5')))
+
+dfemm1.1
+```
+```{r}
+allDataPlot = ggplot(data = dfemm1.1) + 
+  geom_point(aes(x=bTSF, y=mean, color = bTSF)) +
+  geom_errorbar(aes(x=bTSF, ymin = LCL, ymax = UCL, color = bTSF)) +
+  coord_flip() +
+  scale_color_manual(name= "Time Since Fire", values=c('#1b9e77','#d95f02','#7570b3',  '#d95f02','#7570b3', '#d95f02',  '#7570b3'), labels=c("unburned", "one year", "2-5 years")) +
+  labs(x="", y="Land Surface Temperature (Kelvin)") +
+  scale_x_discrete(labels= c("Unburned", "One", "One", "Two", "Two", "Three", "Three")) +
+    theme_bw() #+
+  #theme(legend.position="none")
+
+allDataPlot
+```
+```{r}
+ggsave("../figures/SKLST.png", plot = allDataPlot, width = 6, height =4, units = c("in"), dpi=600, bg = "white" )
+```
+
+```{r}
+pairwise.t.test(recent$tempK, recent$bTSF, p.adjust.method="bonferroni")
+```
+
+```{r}
+emm1
+```
+```{r}
+pairs(emm1)
+```
+```{r}
+One_1 = c(1, 0, 0, 0, 0, 0, 0)
+One_2_5 = c(0, 1, 0, 0, 0, 0, 0)
+Three_1 = c(0, 0, 1, 0, 0, 0, 0)
+Three_2_5 = c(0, 0, 0, 1, 0, 0, 0)
+Two_1 = c(0, 0, 0, 0, 1, 0, 0)
+Two_2_5 = c(0, 0, 0, 0, 0, 1, 0)
+Unburned_0 = c(0, 0, 0, 0, 0, 0, 1) 
+```
+
+```{r}
+compUnburn = contrast(emm1, method = list("Unburned_0 - One_1" = Unburned_0 - One_1,
+                             "Unburned_0 - One_2_5" = Unburned_0 - One_2_5,
+                             "Unburned_0 - Two_1" = Unburned_0 - Two_1,
+                             "Unburned_0 - Two_2_5" = Unburned_0 - Two_2_5,
+                             "Unburned_0 - Three_1" = Unburned_0 - Three_1,
+                             "Unburned_0 - Three_2_5" = Unburned_0 - Three_2_5),
+         adjust = "mvt") %>%
+     confint()
+
+compUnburn
+```
+
+```{r}
+contrast(emm1, method = list("One_1 - Two_1" = One_1 - Two_1,
+                             "One_1 - Three_1" = One_1 - Three_1,
+                             "One_2_5 - Two_2_5" = One_2_5 - Two_2_5,
+                             "One_2_5 - Three_2_5" = One_2_5 - Three_2_5))
+```
+```{r}
+compTB = contrast(emm1, method = list("One_1 - Two_1" = One_1 - Two_1,
+                             "One_1 - Three_1" = One_1 - Three_1,
+                             "One_2_5 - Two_2_5" = One_2_5 - Two_2_5,
+                             "One_2_5 - Three_2_5" = One_2_5 - Three_2_5) ,
+         adjust = "mvt") %>%
+     confint()
+
+compTB
+```
