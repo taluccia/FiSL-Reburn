@@ -21,6 +21,14 @@ library(pacman)
 ```
 
 # Data 
+
+```{r}
+core = st_read("../data/samplePoints/coreAbove/stratifiedCoreAbove_20250228.shp", "stratifiedCoreAbove_20250228")
+```
+
+```{r}
+core
+```
 ## AK Fires
 ```{r}
 AKFires = st_read("../data/boundaries/firePerimeters/mtbs_perimeter_data/mtbs_perims_DD.shp", "mtbs_perims_DD")

@@ -47,117 +47,57 @@ ak = usFires %>%
 ```
 
 ```{r}
-ak1986 = ak %>% filter(year==1986) %>% st_write(., "../outputs/firesByYear/ak1986.shp", driver="ESRI Shapefile")
-ak1987 = ak %>% filter(year==1987) %>% st_write(., "../outputs/firesByYear/ak1987.shp", driver="ESRI Shapefile")
-ak1988 = ak %>% filter(year==1988) %>% st_write(., "../outputs/firesByYear/ak1988.shp", driver="ESRI Shapefile")
-ak1989 = ak %>% filter(year==1989) %>% st_write(., "../outputs/firesByYear/ak1989.shp", driver="ESRI Shapefile")
+ak
+min(ak$year)
+max(ak$year)
+```
+
+```{r eval=FALSE, include=FALSE}
+st_write(ak, "../outputs/boundaries/firePerimeters/akFirePerimeters_1984_2020.shp", driver = "ESRI Shapefile", append = FALSE)
 ```
 
 ```{r}
-ak1990 = ak %>% filter(year==1990) %>% st_write(., "../outputs/firesByYear/ak1990.shp", driver="ESRI Shapefile")
-ak1991 = ak %>% filter(year==1991) %>% st_write(., "../outputs/firesByYear/ak1991.shp", driver="ESRI Shapefile")
-ak1992 = ak %>% filter(year==1992) %>% st_write(., "../outputs/firesByYear/ak1992.shp", driver="ESRI Shapefile")
-ak1993 = ak %>% filter(year==1993) %>% st_write(., "../outputs/firesByYear/ak1993.shp", driver="ESRI Shapefile")
-ak1994 = ak %>% filter(year==1994) %>% st_write(., "../outputs/firesByYear/ak1994.shp", driver="ESRI Shapefile")
-ak1995 = ak %>% filter(year==1995) %>% st_write(., "../outputs/firesByYear/ak1995.shp", driver="ESRI Shapefile")
-ak1996 = ak %>% filter(year==1996) %>% st_write(., "../outputs/firesByYear/ak1996.shp", driver="ESRI Shapefile")
-ak1997 = ak %>% filter(year==1997) %>% st_write(., "../outputs/firesByYear/ak1997.shp", driver="ESRI Shapefile")
-ak1998 = ak %>% filter(year==1998) %>% st_write(., "../outputs/firesByYear/ak1998.shp", driver="ESRI Shapefile")
-ak1999 = ak %>% filter(year==1999) %>% st_write(., "../outputs/firesByYear/ak1999.shp", driver="ESRI Shapefile")
-```
 
-```{r}
-ak2000 = ak %>% filter(year==2000) %>% st_write(., "../outputs/firesByYear/ak2000.shp", driver="ESRI Shapefile")
-ak2001 = ak %>% filter(year==2001) %>% st_write(., "../outputs/firesByYear/ak2001.shp", driver="ESRI Shapefile")
-ak2002 = ak %>% filter(year==2002) %>% st_write(., "../outputs/firesByYear/ak2002.shp", driver="ESRI Shapefile")
-ak2003 = ak %>% filter(year==2003) %>% st_write(., "../outputs/firesByYear/ak2003.shp", driver="ESRI Shapefile")
-ak2004 = ak %>% filter(year==2004) %>% st_write(., "../outputs/firesByYear/ak2004.shp", driver="ESRI Shapefile")
-ak2005 = ak %>% filter(year==2005) %>% st_write(., "../outputs/firesByYear/ak2005.shp", driver="ESRI Shapefile")
-ak2006 = ak %>% filter(year==2006) %>% st_write(., "../outputs/firesByYear/ak2006.shp", driver="ESRI Shapefile")
-ak2007 = ak %>% filter(year==2007) %>% st_write(., "../outputs/firesByYear/ak2007.shp", driver="ESRI Shapefile")
-ak2008 = ak %>% filter(year==2008) %>% st_write(., "../outputs/firesByYear/ak2008.shp", driver="ESRI Shapefile")
-ak2009 = ak %>% filter(year==2009) %>% st_write(., "../outputs/firesByYear/ak2009.shp", driver="ESRI Shapefile")
-```
+# Define output directory
+output_dir <- "../outputs/firesByYearAK/"
 
-```{r}
-ak2010 = ak %>% filter(year==2010) %>% st_write(., "../outputs/firesByYear/ak2010.shp", driver="ESRI Shapefile")
-ak2011 = ak %>% filter(year==2011) %>% st_write(., "../outputs/firesByYear/ak2011.shp", driver="ESRI Shapefile")
-ak2012 = ak %>% filter(year==2012) %>% st_write(., "../outputs/firesByYear/ak2012.shp", driver="ESRI Shapefile")
-ak2013 = ak %>% filter(year==2013) %>% st_write(., "../outputs/firesByYear/ak2013.shp", driver="ESRI Shapefile")
-ak2014 = ak %>% filter(year==2014) %>% st_write(., "../outputs/firesByYear/ak2014.shp", driver="ESRI Shapefile")
-ak2015 = ak %>% filter(year==2015) %>% st_write(., "../outputs/firesByYear/ak2015.shp", driver="ESRI Shapefile")
-ak2016 = ak %>% filter(year==2016) %>% st_write(., "../outputs/firesByYear/ak2016.shp", driver="ESRI Shapefile")
-ak2017 = ak %>% filter(year==2017) %>% st_write(., "../outputs/firesByYear/ak2017.shp", driver="ESRI Shapefile")
-ak2018 = ak %>% filter(year==2018) %>% st_write(., "../outputs/firesByYear/ak2018.shp", driver="ESRI Shapefile")
-ak2019 = ak %>% filter(year==2019) %>% st_write(., "../outputs/firesByYear/ak2019.shp", driver="ESRI Shapefile")
-```
+# Get unique years from the dataset
+years <- unique(ak$year)
 
-```{r}
-ak2020 = ak %>% filter(year==2020) %>% st_write(., "../outputs/firesByYear/ak2020.shp", driver="ESRI Shapefile")
-ak2021 = ak %>% filter(year==2021) %>% st_write(., "../outputs/firesByYear/ak2021.shp", driver="ESRI Shapefile")
+# Loop through each year and save as a shapefile
+for (yr in years) {
+  file_path <- paste0(output_dir, "ak", yr, ".shp")
+  ak %>% 
+    filter(year == yr) %>% 
+    st_write(file_path, driver = "ESRI Shapefile", append = FALSE)
+}
+
 ```
 
 ## Canada
 
 ```{r}
-can = canFires %>% rename(year=YEAR) %>% dplyr::select(-COMMENTS)
-can21 = canFires2021 %>% rename(year=YEAR) %>% dplyr::select(-COMMENTS)
+( can = canFires %>% rename(year=YEAR) %>% dplyr::select(-COMMENTS, -BASRC_1, -new_flg) )
+( can21 = canFires2021 %>% rename(year=YEAR) %>% dplyr::select(-COMMENTS) )
+
+( allcan = bind_rows(can, can21) )
 ```
 
-```{r}
-can21 = canFires2021 %>% 
-  dplyr::mutate(year = lubridate::year(Ig_Date), 
-                month = lubridate::month(Ig_Date), 
-                day = lubridate::day(Ig_Date)) 
-```
 
 ```{r}
-can1986 = can %>% filter(year==1986) %>% st_write(., "../outputs/firesByYear/can1986.shp", driver="ESRI Shapefile")
-can1987 = can %>% filter(year==1987) %>% st_write(., "../outputs/firesByYear/can1987.shp", driver="ESRI Shapefile")
-can1988 = can %>% filter(year==1988) %>% st_write(., "../outputs/firesByYear/can1988.shp", driver="ESRI Shapefile")
-can1989 = can %>% filter(year==1989) %>% st_write(., "../outputs/firesByYear/can1989.shp", driver="ESRI Shapefile")
-```
 
-```{r}
-can1990 = can %>% filter(year==1990) %>% st_write(., "../outputs/firesByYear/can1990.shp", driver="ESRI Shapefile")
-can1991 = can %>% filter(year==1991) %>% st_write(., "../outputs/firesByYear/can1991.shp", driver="ESRI Shapefile")
-can1992 = can %>% filter(year==1992) %>% st_write(., "../outputs/firesByYear/can1992.shp", driver="ESRI Shapefile")
-can1993 = can %>% filter(year==1993) %>% st_write(., "../outputs/firesByYear/can1993.shp", driver="ESRI Shapefile")
-can1994 = can %>% filter(year==1994) %>% st_write(., "../outputs/firesByYear/can1994.shp", driver="ESRI Shapefile")
-can1995 = can %>% filter(year==1995) %>% st_write(., "../outputs/firesByYear/can1995.shp", driver="ESRI Shapefile")
-can1996 = can %>% filter(year==1996) %>% st_write(., "../outputs/firesByYear/can1996.shp", driver="ESRI Shapefile")
-can1997 = can %>% filter(year==1997) %>% st_write(., "../outputs/firesByYear/can1997.shp", driver="ESRI Shapefile")
-can1998 = can %>% filter(year==1998) %>% st_write(., "../outputs/firesByYear/can1998.shp", driver="ESRI Shapefile")
-can1999 = can %>% filter(year==1999) %>% st_write(., "../outputs/firesByYear/can1999.shp", driver="ESRI Shapefile")
-```
+# Define output directory
+output_dir <- "../outputs/firesByYearCAN/"
 
-```{r}
-can2000 = can %>% filter(year==2000) %>% st_write(., "../outputs/firesByYear/can2000.shp", driver="ESRI Shapefile")
-can2001 = can %>% filter(year==2001) %>% st_write(., "../outputs/firesByYear/can2001.shp", driver="ESRI Shapefile")
-can2002 = can %>% filter(year==2002) %>% st_write(., "../outputs/firesByYear/can2002.shp", driver="ESRI Shapefile")
-can2003 = can %>% filter(year==2003) %>% st_write(., "../outputs/firesByYear/can2003.shp", driver="ESRI Shapefile")
-can2004 = can %>% filter(year==2004) %>% st_write(., "../outputs/firesByYear/can2004.shp", driver="ESRI Shapefile")
-can2005 = can %>% filter(year==2005) %>% st_write(., "../outputs/firesByYear/can2005.shp", driver="ESRI Shapefile")
-can2006 = can %>% filter(year==2006) %>% st_write(., "../outputs/firesByYear/can2006.shp", driver="ESRI Shapefile")
-can2007 = can %>% filter(year==2007) %>% st_write(., "../outputs/firesByYear/can2007.shp", driver="ESRI Shapefile")
-can2008 = can %>% filter(year==2008) %>% st_write(., "../outputs/firesByYear/can2008.shp", driver="ESRI Shapefile")
-can2009 = can %>% filter(year==2009) %>% st_write(., "../outputs/firesByYear/can2009.shp", driver="ESRI Shapefile")
-```
+# Get unique years from the dataset
+years <- unique(allcan$year)
 
-```{r}
-can2010 = can %>% filter(year==2010) %>% st_write(., "../outputs/firesByYear/can2010.shp", driver="ESRI Shapefile")
-can2011 = can %>% filter(year==2011) %>% st_write(., "../outputs/firesByYear/can2011.shp", driver="ESRI Shapefile")
-can2012 = can %>% filter(year==2012) %>% st_write(., "../outputs/firesByYear/can2012.shp", driver="ESRI Shapefile")
-can2013 = can %>% filter(year==2013) %>% st_write(., "../outputs/firesByYear/can2013.shp", driver="ESRI Shapefile")
-can2014 = can %>% filter(year==2014) %>% st_write(., "../outputs/firesByYear/can2014.shp", driver="ESRI Shapefile")
-can2015 = can %>% filter(year==2015) %>% st_write(., "../outputs/firesByYear/can2015.shp", driver="ESRI Shapefile")
-can2016 = can %>% filter(year==2016) %>% st_write(., "../outputs/firesByYear/can2016.shp", driver="ESRI Shapefile")
-can2017 = can %>% filter(year==2017) %>% st_write(., "../outputs/firesByYear/can2017.shp", driver="ESRI Shapefile")
-can2018 = can %>% filter(year==2018) %>% st_write(., "../outputs/firesByYear/can2018.shp", driver="ESRI Shapefile")
-can2019 = can %>% filter(year==2019) %>% st_write(., "../outputs/firesByYear/can2019.shp", driver="ESRI Shapefile")
-```
+# Loop through each year and save as a shapefile
+for (yr in years) {
+  file_path <- paste0(output_dir, "can", yr, ".shp")
+  allcan %>% 
+    filter(year == yr) %>% 
+    st_write(file_path, driver = "ESRI Shapefile", append = FALSE)
+}
 
-```{r}
-can2020 = can %>% filter(year==2020) %>% st_write(., "../outputs/firesByYear/can2020.shp", driver="ESRI Shapefile")
-can2021 = can21 %>% filter(year==2021) %>% st_write(., "../outputs/firesByYear/can2021.shp", driver="ESRI Shapefile")
 ```

@@ -33,6 +33,9 @@ library(patchwork)
 
 
 # Data
+```{r}
+above = st_read("../data/spatialData/ABoVE_Study_Domain/ABoVE_Study_Domain.shp", "ABoVE_Study_Domain")
+```
 
 ```{r}
 res = st_read("../data/spatialData/RESOLVE_Ecoregions_and_Biomes/Biomes_and_Ecoregions_2017.shp", "Biomes_and_Ecoregions_2017")
@@ -42,6 +45,10 @@ res = st_read("../data/spatialData/RESOLVE_Ecoregions_and_Biomes/Biomes_and_Ecor
 ( na_boreal = res %>% filter(BIOME_NUM==6) %>% filter(REALM=="Nearctic"))
 ```
 
+```{r}
+above
+( core = above %>% filter(Region=="Core Region") )
+```
     
 
 ```{r}
@@ -78,15 +85,36 @@ st_crs(res)
 
 
 ```{r}
+st_crs(core)
+
+```
+
+```{r}
 projection = "+proj=aea +lon_0=-108.984375 +lat_1=48.2911002 +lat_2=69.1799501 +lat_0=58.7355252 +datum=WGS84 +units=m +no_defs"
 ```
+
 # Reproject
 
 ```{r}
 na_pp = st_transform(na, crs = projection)
 boreal_pp = st_transform(na_boreal, crs = projection)
+core_pp = st_transform(core, crs = projection)
+```
+```{r}
+core_pp
+```
+```{r}
+( naBoreal_albers = st_transform(na_boreal, crs = st_crs(core)) )
+( na_albers = st_transform(na, crs = st_crs(core)) )
 ```
 
+```{r}
+ecozone_core = st_join(naBoreal_albers, core, largest = TRUE) %>% drop_na(Region)
+```
+
+```{r}
+ecozone_core
+```
 # Palettes
 
 ```{r}
@@ -120,7 +148,12 @@ disp_window <- st_sfc(st_point(st_coordinates(zoom_to_xy - c(x_span / 2, y_span 
 
 ```
 
+```{r}
+ggplot() +
+     geom_sf(data = na_pp, fill = "#F9F6EE", colour="#F9F6EE") +
 
+    geom_sf(data = core_pp, fill="black", color="black")
+```
 
 # Build Overview map by Ecozone
 
@@ -128,6 +161,7 @@ disp_window <- st_sfc(st_point(st_coordinates(zoom_to_xy - c(x_span / 2, y_span 
 ( basicBorealMap = ggplot() +
      geom_sf(data = na_pp, fill = "#F9F6EE", colour="#F9F6EE") +
     geom_sf(data = boreal_pp, fill='#4a6741', color='#4a6741') +
+    
   
   #coord_sf() +
   
@@ -148,6 +182,79 @@ disp_window <- st_sfc(st_point(st_coordinates(zoom_to_xy - c(x_span / 2, y_span 
 ```{r eval=FALSE, include=FALSE}
 ggsave("../figures/MapBasicBorealPoster.png", plot = basicBorealMap, width = 8, height =6, units = c("in"), dpi=600, bg = "white" )
 ```
+
+
+```{r map, echo=FALSE}
+( coreMap = ggplot() +
+     geom_sf(data = na_pp, fill = "#F9F6EE", colour="#F9F6EE") +
+    geom_sf(data = boreal_pp, fill='#4a6741', color='gray') +
+    geom_sf(data = core_pp, fill=NA, color='black') +
+    
+  
+  #coord_sf() +
+  
+  coord_sf(xlim = st_coordinates(disp_window)[,'X'], ylim = st_coordinates(disp_window)[,'Y']) +
+  theme(panel.grid.major = element_line(color = gray(0.5), linetype = "dashed", linewidth = 0.5), 
+        panel.background = element_rect(fill = "#C5D8D7")) +
+  theme(plot.margin=unit(c(0,0,0,0), "mm")) + 
+  theme(legend.position = "bottom", 
+        axis.title.x = element_blank(), 
+        axis.title.y = element_blank(),
+        axis.text.x = element_text(size = 14, color = "black"),
+        axis.text.y = element_text(size = 14, color = "black")) 
+)
+
+```
+
+```{r}
+#### zoom to kamchatka, different projection ####
+
+zoom_to <- c(-97.93, 63.84)  # ~ center of Kamchatka
+zoom_level <- 2.6
+
+# Lambert azimuthal equal-area projection around center of interest
+#target_crs <- polarProj#sprintf('+proj=laea +lon_0=%f +lat_0=%f', zoom_to[1], zoom_to[2])
+
+
+C <- 40075016.686   # ~ circumference of Earth in meters
+x_span <- C / 2^(zoom_level+.1)
+y_span <- C / 2^(zoom_level+.6)   # also sets aspect ratio
+
+zoom_to_xy <- st_transform(st_sfc(st_point(zoom_to), crs = 4326), crs = st_crs(core))
+zoom_to_xy
+
+disp_window <- st_sfc(st_point(st_coordinates(zoom_to_xy - c(x_span / 2, y_span / 2))),
+                      st_point(st_coordinates(zoom_to_xy + c(x_span / 2, y_span / 2))),
+                      crs = projection)
+
+```
+```{r, echo=FALSE}
+( ecozoneCoreMap = ggplot() +
+     geom_sf(data = na_albers, fill = "#F9F6EE", colour="#F9F6EE") +
+    geom_sf(data = ecozone_core, fill='#4a6741', color='gray') +
+    geom_sf(data = above, fill=NA, color="black") +
+  
+  #coord_sf() +
+  
+  coord_sf(xlim = st_coordinates(disp_window)[,'X'], ylim = st_coordinates(disp_window)[,'Y']) +
+  theme(panel.grid.major = element_line(color = gray(0.5), linetype = "dashed", linewidth = 0.5), 
+        panel.background = element_rect(fill = "#C5D8D7")) +
+  theme(plot.margin=unit(c(0,0,0,0), "mm")) + 
+  theme(legend.position = "bottom", 
+        axis.title.x = element_blank(), 
+        axis.title.y = element_blank(),
+        axis.text.x = element_text(size = 14, color = "black"),
+        axis.text.y = element_text(size = 14, color = "black")) 
+)
+
+```
+
+```{r eval=FALSE, include=FALSE}
+ggsave("../figures/MapBasicBorealAboVECore.png", plot = ecozoneCoreMap, width = 8, height =6, units = c("in"), dpi=600, bg = "white" )
+```
+
+
+
 
 
 # Raster data Reburns

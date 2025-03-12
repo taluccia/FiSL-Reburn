@@ -23,6 +23,63 @@ sklst1k
 ```{r}
 skreburn1k = read_csv("../data/samplePoints/raw/sk/skReburn1000v2.csv") %>% dplyr::select(-.geo)
 ```
+```{r eval=FALSE, include=FALSE}
+## Code revision for below code from chat gpt
+library(dplyr)
+library(readr)
+
+# Read Data
+sklst1k <- read_csv("../data/samplePoints/raw/sk/skLSTSummer2013To2018.csv") %>% select(-.geo)
+skreburn1k <- read_csv("../data/samplePoints/raw/sk/skReburn1000v2.csv") %>% select(-.geo)
+
+# Clean Data
+lstclean <- sklst1k %>%
+  full_join(skreburn1k, by = c("system:index", "ECO_NAME", "lat", "lon", "rowId")) %>%
+  rename(ID = "system:index", countYr = count.x, water = water.x, maxYr = maxCA, 
+         medianYr = medianCA, minYr = minCA, sumYr = sumCA) %>%
+  mutate(across(c(maxYr, medianYr, minYr, sumYr), ~replace_na(., 0))) %>%
+  select(ID:rowId, maxYr:sumYr, water) %>%
+  mutate(
+    burned = case_when(
+      countYr == 0 ~ "Unburned",
+      countYr == 1 ~ "One",
+      countYr == 2 ~ "Two",
+      countYr == 3 ~ "Three",
+      TRUE ~ "Other"
+    )
+  ) %>%
+  mutate(across(2013:2018, ~2018 - maxYr, .names = "TSF{col}")) %>%
+  mutate(across(2013:2018, ~case_when(
+    countYr == 0 ~ "0",
+    . == 1 ~ "1",
+    . %in% 2:5 ~ "2-5",
+    . %in% 6:10 ~ "6-10",
+    . %in% 11:20 ~ "11-20",
+    . %in% 21:31 ~ "21-31",
+    TRUE ~ "Other"
+  ), .names = "TimeSinceFire{col}")) %>%
+  mutate(across(starts_with("TimeSinceFire"), ~ordered(., levels = c("0", "1", "2-5", "6-10", "11-20", "21-31", "Other"))),
+         burned = ordered(burned, levels = c("Unburned", "One", "Two", "Three", "Other"))) %>%
+  filter(water == 1, lat >= 55)
+
+# Function to Create Yearly Data
+create_samp_df <- function(year, data) {
+  data %>%
+    select(ID, ECO_NAME, !!sym(paste0("lst", year)), countYr:sumYr, burned, !!sym(paste0("TSF", year)), !!sym(paste0("TimeSinceFire", year))) %>%
+    rename(lst = !!sym(paste0("lst", year)), TSF = !!sym(paste0("TSF", year)), TimeSinceFire = !!sym(paste0("TimeSinceFire", year))) %>%
+    mutate(lstYr = year, tsfYr = year)
+}
+
+# Generate Data Frames for Each Year and Bind Rows
+years <- 2013:2018
+sklstdata1k <- bind_rows(lapply(years, create_samp_df, data = lstclean)) %>%
+  mutate(shldPln = ifelse(ECO_NAME == "Mid-Canada Boreal Plains forests", "Plains", "Shield"))
+
+# Export
+write.csv(sklstdata1k, '../outputs/cleanedSamplePoints/skStratifiedSample1k20182013LST.csv', row.names = FALSE)
+
+```
+
 
 # Clean
 ```{r}
