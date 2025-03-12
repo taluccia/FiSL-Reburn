@@ -173,9 +173,6 @@ print(pre_post_na)
 fit1 = glm(diffLst ~ bTSF, data = recent, family = gaussian)
 ```
 
-```{r}
-summary(fit1)
-```
 
 ### Residuals: 
 
@@ -210,7 +207,7 @@ dfemmfit1.1 = dfemmfit1 %>% mutate(mean=(emmean),
 dfemmfit1.1
 ```
 
-#5495CFFF, #F5AF4DFF, #DB4743FF, #7C873EFF, #FEF4D5FF
+
 ```{r}
 allDataFit1Plot = ggplot(data = dfemmfit1.1) + 
   geom_point(aes(x=bTSF, y=mean, color = bTSF)) +
@@ -256,10 +253,6 @@ ggsave("../figures/20250306_LSTDifferencerecentBorealCompareOneTimeBurnedPPTSlid
 ```
 
 
-
-
-
-
 ## Testing difference in means
 
 ```{r}
@@ -274,10 +267,6 @@ Three_2_5 = c(0, 0, 0, 1, 0, 0)
 Two_1 = c(0, 0, 0, 0, 1, 0)
 Two_2_5 = c(0, 0, 0, 0, 0, 1)
 ```
-
-
-
-
 
 ```{r}
 contrast(emmfit1, method = list("One_1 - Two_1" = One_1 - Two_1,
@@ -310,76 +299,17 @@ unburned_lst
 unique(unburned_lst$ECO_NAME)
 ```
 
-### 2022
-
 ```{r}
-( ref2022 = unburned_lst %>% 
+calculate_refLst <- function(year) {
+  unburned_lst %>% 
     group_by(ECO_NAME) %>% 
-    summarise(refLst = round(mean(mean_2022),1)) )
-```
+    summarise(refLst = round(mean(get(paste0("mean_", year))), 1))
+}
 
-### 2021
-
-```{r}
-( ref2021 = unburned_lst %>% 
-    group_by(ECO_NAME) %>% 
-    summarise(refLst = round(mean(mean_2021),1)) )
-```
-
-### 2020
-
-```{r}
-( ref2020 = unburned_lst %>% 
-    group_by(ECO_NAME) %>% 
-    summarise(refLst = round(mean(mean_2020),1)) )
-```
-
-### 2019
-
-```{r}
-( ref2019 = unburned_lst %>% 
-    group_by(ECO_NAME) %>% 
-    summarise(refLst = round(mean(mean_2019),1)) )
-```
-
-### 2018
-
-```{r}
-( ref2018 = unburned_lst %>% 
-    group_by(ECO_NAME) %>% 
-    summarise(refLst = round(mean(mean_2018),1)) )
-```
-
-### 2017
-
-```{r}
-( ref2017 = unburned_lst %>% 
-    group_by(ECO_NAME) %>% 
-    summarise(refLst = round(mean(mean_2017),1)) )
-```
-
-### 2016 
-
-```{r}
-( ref2016 = unburned_lst %>% 
-    group_by(ECO_NAME) %>% 
-    summarise(refLst = round(mean(mean_2016),1)) )
-```
-
-### 2015
-
-```{r}
-( ref2015 = unburned_lst %>% 
-    group_by(ECO_NAME) %>% 
-    summarise(refLst = round(mean(mean_2015),1)) )
-```
-
-### 2014
-
-```{r}
-( ref2014 = unburned_lst %>% 
-    group_by(ECO_NAME) %>% 
-    summarise(refLst = round(mean(mean_2014),1)) )
+# Create a list of reference datasets for multiple years
+years <- 2014:2022
+ref_data <- setNames(lapply(years, calculate_refLst), paste0("ref", years))
+ref_data
 ```
 
 ## Clean with Standard pre year
@@ -397,443 +327,88 @@ burned_lst %>% mutate(tsf2022 = 2022-maxYr) %>% group_by(as.factor(tsf2022)) %>%
 ```
 
 ```{r}
-( standardPre2022 = burned_lst %>% 
-  dplyr::select(ID:maxYr, mean_2022, burned) %>%
-    mutate(refLst2022 = case_when(
-    ECO_NAME %in% ref2022$ECO_NAME ~ ref2022$refLst[match(ECO_NAME, ref2022$ECO_NAME)])) %>%  # Assign value if ID matches
-    mutate(tsf = 2022-maxYr,
-           diffLst= refLst2022-mean_2022) %>%
-    mutate(across(tsf, ~case_when(
-    tsf == 1 ~ "1",
-    . %in% 2:5 ~ "2-5",
-    . %in% 6:10 ~ "6-10",
-    . %in% 11:20 ~ "11-20",
-    . %in% 21:30 ~ "21-30",
-    . %in% 31:36 ~ "31-36",
-    TRUE ~ "Other"
-  ), .names = "TimeSinceFire")) %>%
-    mutate(across(tsf, ~case_when(
-    tsf %in% 1:5 ~ "1-5",
-    . %in% 6:10 ~ "6-10",
-    . %in% 11:20 ~ "11-20",
-    . %in% 21:36 ~ "21+",
-    TRUE ~ "Other"
-  ), .names = "tsfStd")) %>%
-    mutate(across(tsf, ~case_when(
-    tsf == 1 ~ "1",
-    . %in% 2:5 ~ "2-5",
-    . %in% 6:15 ~ "6-15",
-    . %in% 16:36 ~ "16+",
-    TRUE ~ "Other"
-  ), .names = "tsfAlt")) %>%
-  mutate(across(starts_with("TimeSinceFire"), ~ordered(., levels = c("1", "2-5", "6-10", "11-20", "21-30", "31-36"))),
-         across(starts_with("tsfStd"), ~ordered(., levels = c("1-5", "6-10", "11-20", "21+"))),
-         across(starts_with("tsfAlt"), ~ordered(., levels = c("1", "2-5", "6-15", "16+"))),
-         burned = ordered(burned, levels = c("One", "Two", "Three", "Other"))) %>%
-    mutate(bTSF = paste0(burned,"_", TimeSinceFire),
-           bTsfStd = paste0(burned,"_", tsfStd),
-           bTsfAlt = paste0(burned,"_", tsfAlt),
-         sampleYr=2022)  %>%
-    rename(lstMean = mean_2022, refLst= refLst2022) 
+calculate_standardPre <- function(year) {
+  ref_year <- ref_data[[paste0("ref", year)]]
+  burned_lst %>%
+    filter(maxYr < year) %>%
+    dplyr::select(ID:maxYr, !!sym(paste0("mean_", year)), burned) %>%
+    mutate(refLst = case_when(
+      ECO_NAME %in% ref_year$ECO_NAME ~ ref_year$refLst[match(ECO_NAME, ref_year$ECO_NAME)]
+    )) %>%
+    mutate(
+      tsf = year - maxYr,
+      diffLst = refLst - get(paste0("mean_", year))
+    ) %>%
+    mutate(
+      TimeSinceFire = case_when(
+        tsf == 1 ~ "1",
+        tsf %in% 2:5 ~ "2-5",
+        tsf %in% 6:10 ~ "6-10",
+        tsf %in% 11:20 ~ "11-20",
+        tsf %in% 21:30 ~ "21-30",
+        tsf %in% 31:36 ~ "31-36",
+        TRUE ~ "Other"
+      ),
+      tsfStd = case_when(
+        tsf %in% 1:5 ~ "1-5",
+        tsf %in% 6:10 ~ "6-10",
+        tsf %in% 11:20 ~ "11-20",
+        tsf %in% 21:36 ~ "21+",
+        TRUE ~ "Other"
+      ),
+      tsfAlt = case_when(
+        tsf == 1 ~ "1",
+        tsf %in% 2:5 ~ "2-5",
+        tsf %in% 6:15 ~ "6-15",
+        tsf %in% 16:36 ~ "16+",
+        TRUE ~ "Other"
+      )
+    ) %>%
+    mutate(across(
+      c(TimeSinceFire),
+      ~ ordered(., levels = c("1", "2-5", "6-10", "11-20", "21-30", "31-36"))
+    )) %>%
+     mutate(across(
+      c(tsfStd),
+      ~ ordered(., levels = c("1-5", "6-10", "11-20", "21+"))
+    )) %>%
+     mutate(across(
+      c(tsfAlt),
+      ~ ordered(., levels = c("1", "2-5", "6-15", "16+"))
+    )) %>%
+    mutate(bTSF = paste0(burned, "_", TimeSinceFire),
+           bTsfStd = paste0(burned, "_", tsfStd),
+           bTsfAlt = paste0(burned, "_", tsfAlt),
+           sampleYr = year) %>%
+    rename(lstMean = !!sym(paste0("mean_", year)))
+}
 
-  )
+# Generate standard pre-year data for multiple years
+standardPre_data <- setNames(lapply(years, calculate_standardPre), paste0("standardPre", years))
+
+```
+
+```{r}
+standardPre_data
 ```
 
 
 ```{r}
-( standardPre2021 = burned_lst %>% 
-    filter(maxYr <2021) %>%
-  dplyr::select(ID:maxYr, mean_2021, burned) %>%
-    mutate(refLst2021 = case_when(
-    ECO_NAME %in% ref2021$ECO_NAME ~ ref2021$refLst[match(ECO_NAME, ref2021$ECO_NAME)])) %>%  # Assign value if ID matches
-    mutate(tsf = 2021-maxYr,
-           diffLst= refLst2021-mean_2021) %>%
-    mutate(across(tsf, ~case_when(
-    tsf == 1 ~ "1",
-    . %in% 2:5 ~ "2-5",
-    . %in% 6:10 ~ "6-10",
-    . %in% 11:20 ~ "11-20",
-    . %in% 21:30 ~ "21-30",
-    . %in% 31:36 ~ "31-36",
-    TRUE ~ "Other"
-  ), .names = "TimeSinceFire")) %>%
-    mutate(across(tsf, ~case_when(
-    tsf %in% 1:5 ~ "1-5",
-    . %in% 6:10 ~ "6-10",
-    . %in% 11:20 ~ "11-20",
-    . %in% 21:36 ~ "21+",
-    TRUE ~ "Other"
-  ), .names = "tsfStd")) %>%
-    mutate(across(tsf, ~case_when(
-    tsf == 1 ~ "1",
-    . %in% 2:5 ~ "2-5",
-    . %in% 6:15 ~ "6-15",
-    . %in% 16:36 ~ "16+",
-    TRUE ~ "Other"
-  ), .names = "tsfAlt")) %>%
-  mutate(across(starts_with("TimeSinceFire"), ~ordered(., levels = c("1", "2-5", "6-10", "11-20", "21-30", "31-36"))),
-         across(starts_with("tsfStd"), ~ordered(., levels = c("1-5", "6-10", "11-20", "21+"))),
-         across(starts_with("tsfAlt"), ~ordered(., levels = c("1", "2-5", "6-15", "16+"))),
-         burned = ordered(burned, levels = c("One", "Two", "Three", "Other"))) %>%
-    mutate(bTSF = paste0(burned,"_", TimeSinceFire),
-           bTsfStd = paste0(burned,"_", tsfStd),
-           bTsfAlt = paste0(burned,"_", tsfAlt),
-         sampleYr=2021)  %>%
-    rename(lstMean = mean_2021, refLst= refLst2021) 
-
-
-  )
-```
-
-```{r}
-( standardPre2020 = burned_lst %>% 
-    filter(maxYr <2020) %>%
-  dplyr::select(ID:maxYr, mean_2020, burned) %>%
-    mutate(refLst2020 = case_when(
-    ECO_NAME %in% ref2020$ECO_NAME ~ ref2020$refLst[match(ECO_NAME, ref2020$ECO_NAME)])) %>%  # Assign value if ID matches
-    mutate(tsf = 2020-maxYr,
-           diffLst= refLst2020-mean_2020) %>%
-    mutate(across(tsf, ~case_when(
-    tsf == 1 ~ "1",
-    . %in% 2:5 ~ "2-5",
-    . %in% 6:10 ~ "6-10",
-    . %in% 11:20 ~ "11-20",
-    . %in% 21:30 ~ "21-30",
-    . %in% 31:36 ~ "31-36",
-    TRUE ~ "Other"
-  ), .names = "TimeSinceFire")) %>%
-    mutate(across(tsf, ~case_when(
-    tsf %in% 1:5 ~ "1-5",
-    . %in% 6:10 ~ "6-10",
-    . %in% 11:20 ~ "11-20",
-    . %in% 21:36 ~ "21+",
-    TRUE ~ "Other"
-  ), .names = "tsfStd")) %>%
-    mutate(across(tsf, ~case_when(
-    tsf == 1 ~ "1",
-    . %in% 2:5 ~ "2-5",
-    . %in% 6:15 ~ "6-15",
-    . %in% 16:36 ~ "16+",
-    TRUE ~ "Other"
-  ), .names = "tsfAlt")) %>%
-  mutate(across(starts_with("TimeSinceFire"), ~ordered(., levels = c("1", "2-5", "6-10", "11-20", "21-30", "31-36"))),
-         across(starts_with("tsfStd"), ~ordered(., levels = c("1-5", "6-10", "11-20", "21+"))),
-         across(starts_with("tsfAlt"), ~ordered(., levels = c("1", "2-5", "6-15", "16+"))),
-         burned = ordered(burned, levels = c("One", "Two", "Three", "Other"))) %>%
-    mutate(bTSF = paste0(burned,"_", TimeSinceFire),
-           bTsfStd = paste0(burned,"_", tsfStd),
-           bTsfAlt = paste0(burned,"_", tsfAlt),
-         sampleYr=2020)  %>%
-    rename(lstMean = mean_2020, refLst= refLst2020) 
-
-
-  )
-```
-
-```{r}
-( standardPre2019 = burned_lst %>% 
-    filter(maxYr <2019) %>%
-  dplyr::select(ID:maxYr, mean_2019, burned) %>%
-    mutate(refLst2019 = case_when(
-    ECO_NAME %in% ref2019$ECO_NAME ~ ref2019$refLst[match(ECO_NAME, ref2019$ECO_NAME)])) %>%  # Assign value if ID matches
-    mutate(tsf = 2019-maxYr,
-           diffLst= refLst2019-mean_2019) %>%
-    mutate(across(tsf, ~case_when(
-    tsf == 1 ~ "1",
-    . %in% 2:5 ~ "2-5",
-    . %in% 6:10 ~ "6-10",
-    . %in% 11:20 ~ "11-20",
-    . %in% 21:30 ~ "21-30",
-    . %in% 31:36 ~ "31-36",
-    TRUE ~ "Other"
-  ), .names = "TimeSinceFire")) %>%
-    mutate(across(tsf, ~case_when(
-    tsf %in% 1:5 ~ "1-5",
-    . %in% 6:10 ~ "6-10",
-    . %in% 11:20 ~ "11-20",
-    . %in% 21:36 ~ "21+",
-    TRUE ~ "Other"
-  ), .names = "tsfStd")) %>%
-    mutate(across(tsf, ~case_when(
-    tsf == 1 ~ "1",
-    . %in% 2:5 ~ "2-5",
-    . %in% 6:15 ~ "6-15",
-    . %in% 16:36 ~ "16+",
-    TRUE ~ "Other"
-  ), .names = "tsfAlt")) %>%
-  mutate(across(starts_with("TimeSinceFire"), ~ordered(., levels = c("1", "2-5", "6-10", "11-20", "21-30", "31-36"))),
-         across(starts_with("tsfStd"), ~ordered(., levels = c("1-5", "6-10", "11-20", "21+"))),
-         across(starts_with("tsfAlt"), ~ordered(., levels = c("1", "2-5", "6-15", "16+"))),
-         burned = ordered(burned, levels = c("One", "Two", "Three", "Other"))) %>%
-    mutate(bTSF = paste0(burned,"_", TimeSinceFire),
-           bTsfStd = paste0(burned,"_", tsfStd),
-           bTsfAlt = paste0(burned,"_", tsfAlt),
-         sampleYr=2019) %>%
-    rename(lstMean = mean_2019, refLst= refLst2019) 
-
-
-  )
-```
-## 2018
-
-```{r}
-( standardPre2018 = burned_lst %>% 
-    filter(maxYr <2018) %>%
-  dplyr::select(ID:maxYr, mean_2018, burned) %>%
-    mutate(refLst2018 = case_when(
-    ECO_NAME %in% ref2018$ECO_NAME ~ ref2018$refLst[match(ECO_NAME, ref2018$ECO_NAME)])) %>%  # Assign value if ID matches
-    mutate(tsf = 2018-maxYr,
-           diffLst= refLst2018-mean_2018) %>%
-    mutate(across(tsf, ~case_when(
-    tsf == 1 ~ "1",
-    . %in% 2:5 ~ "2-5",
-    . %in% 6:10 ~ "6-10",
-    . %in% 11:20 ~ "11-20",
-    . %in% 21:30 ~ "21-30",
-    . %in% 31:36 ~ "31-36",
-    TRUE ~ "Other"
-  ), .names = "TimeSinceFire")) %>%
-    mutate(across(tsf, ~case_when(
-    tsf %in% 1:5 ~ "1-5",
-    . %in% 6:10 ~ "6-10",
-    . %in% 11:20 ~ "11-20",
-    . %in% 21:36 ~ "21+",
-    TRUE ~ "Other"
-  ), .names = "tsfStd")) %>%
-    mutate(across(tsf, ~case_when(
-    tsf == 1 ~ "1",
-    . %in% 2:5 ~ "2-5",
-    . %in% 6:15 ~ "6-15",
-    . %in% 16:36 ~ "16+",
-    TRUE ~ "Other"
-  ), .names = "tsfAlt")) %>%
-  mutate(across(starts_with("TimeSinceFire"), ~ordered(., levels = c("1", "2-5", "6-10", "11-20", "21-30", "31-36"))),
-         across(starts_with("tsfStd"), ~ordered(., levels = c("1-5", "6-10", "11-20", "21+"))),
-         across(starts_with("tsfAlt"), ~ordered(., levels = c("1", "2-5", "6-15", "16+"))),
-         burned = ordered(burned, levels = c("One", "Two", "Three", "Other")), 
-         bTSF = paste0(burned,"_", TimeSinceFire),
-         bTsfStd = paste0(burned,"_", tsfStd),
-         bTsfAlt = paste0(burned,"_", tsfAlt),
-         sampleYr=2018)  %>%
-    rename(lstMean = mean_2018, refLst= refLst2018) 
-
-
-
-  )
-```
-
-
-## 2017
-
-```{r}
-( standardPre2017 = burned_lst %>% 
-    filter(maxYr <2017) %>%
-  dplyr::select(ID:maxYr, mean_2017, burned) %>%
-    mutate(refLst2017 = case_when(
-    ECO_NAME %in% ref2017$ECO_NAME ~ ref2017$refLst[match(ECO_NAME, ref2017$ECO_NAME)])) %>%  # Assign value if ID matches
-    mutate(tsf = 2017-maxYr,
-           diffLst= refLst2017-mean_2017) %>%
-    mutate(across(tsf, ~case_when(
-    tsf == 1 ~ "1",
-    . %in% 2:5 ~ "2-5",
-    . %in% 6:10 ~ "6-10",
-    . %in% 11:20 ~ "11-20",
-    . %in% 21:30 ~ "21-30",
-    . %in% 31:36 ~ "31-36",
-    TRUE ~ "Other"
-  ), .names = "TimeSinceFire")) %>%
-    mutate(across(tsf, ~case_when(
-    tsf %in% 1:5 ~ "1-5",
-    . %in% 6:10 ~ "6-10",
-    . %in% 11:20 ~ "11-20",
-    . %in% 21:36 ~ "21+",
-    TRUE ~ "Other"
-  ), .names = "tsfStd")) %>%
-    mutate(across(tsf, ~case_when(
-    tsf == 1 ~ "1",
-    . %in% 2:5 ~ "2-5",
-    . %in% 6:15 ~ "6-15",
-    . %in% 16:36 ~ "16+",
-    TRUE ~ "Other"
-  ), .names = "tsfAlt")) %>%
-  mutate(across(starts_with("TimeSinceFire"), ~ordered(., levels = c("1", "2-5", "6-10", "11-20", "21-30", "31-36"))),
-         across(starts_with("tsfStd"), ~ordered(., levels = c("1-5", "6-10", "11-20", "21+"))),
-         across(starts_with("tsfAlt"), ~ordered(., levels = c("1", "2-5", "6-15", "16+"))),
-         burned = ordered(burned, levels = c("One", "Two", "Three", "Other")), 
-         bTSF = paste0(burned,"_", TimeSinceFire),
-         bTsfStd = paste0(burned,"_", tsfStd),
-         bTsfAlt = paste0(burned,"_", tsfAlt),
-         sampleYr=2017)  %>%
-    rename(lstMean = mean_2017, refLst= refLst2017) 
-
-
-
-  )
-```
-
-## 2016
-
-```{r}
-( standardPre2016 = burned_lst %>% 
-    filter(maxYr <2016) %>%
-  dplyr::select(ID:maxYr, mean_2016, burned) %>%
-    mutate(refLst2016 = case_when(
-    ECO_NAME %in% ref2016$ECO_NAME ~ ref2016$refLst[match(ECO_NAME, ref2016$ECO_NAME)])) %>%  # Assign value if ID matches
-    mutate(tsf = 2016-maxYr,
-           diffLst= refLst2016-mean_2016) %>%
-    mutate(across(tsf, ~case_when(
-    tsf == 1 ~ "1",
-    . %in% 2:5 ~ "2-5",
-    . %in% 6:10 ~ "6-10",
-    . %in% 11:20 ~ "11-20",
-    . %in% 21:30 ~ "21-30",
-    . %in% 31:36 ~ "31-36",
-    TRUE ~ "Other"
-  ), .names = "TimeSinceFire")) %>%
-    mutate(across(tsf, ~case_when(
-    tsf %in% 1:5 ~ "1-5",
-    . %in% 6:10 ~ "6-10",
-    . %in% 11:20 ~ "11-20",
-    . %in% 21:36 ~ "21+",
-    TRUE ~ "Other"
-  ), .names = "tsfStd")) %>%
-    mutate(across(tsf, ~case_when(
-    tsf == 1 ~ "1",
-    . %in% 2:5 ~ "2-5",
-    . %in% 6:15 ~ "6-15",
-    . %in% 16:36 ~ "16+",
-    TRUE ~ "Other"
-  ), .names = "tsfAlt")) %>%
-  mutate(across(starts_with("TimeSinceFire"), ~ordered(., levels = c("1", "2-5", "6-10", "11-20", "21-30", "31-36"))),
-         across(starts_with("tsfStd"), ~ordered(., levels = c("1-5", "6-10", "11-20", "21+"))),
-         across(starts_with("tsfAlt"), ~ordered(., levels = c("1", "2-5", "6-15", "16+"))),
-         burned = ordered(burned, levels = c("One", "Two", "Three", "Other")), 
-         bTSF = paste0(burned,"_", TimeSinceFire),
-         bTsfStd = paste0(burned,"_", tsfStd),
-         bTsfAlt = paste0(burned,"_", tsfAlt),
-         sampleYr=2016)  %>%
-    rename(lstMean = mean_2016, refLst= refLst2016) 
-
-
-
-  )
-```
-
-
-## 2015
-
-```{r}
-( standardPre2015 = burned_lst %>% 
-    filter(maxYr <2015) %>%
-  dplyr::select(ID:maxYr, mean_2015, burned) %>%
-    mutate(refLst2015 = case_when(
-    ECO_NAME %in% ref2015$ECO_NAME ~ ref2015$refLst[match(ECO_NAME, ref2015$ECO_NAME)])) %>%  # Assign value if ID matches
-    mutate(tsf = 2015-maxYr,
-           diffLst= refLst2015-mean_2015) %>%
-    mutate(across(tsf, ~case_when(
-    tsf == 1 ~ "1",
-    . %in% 2:5 ~ "2-5",
-    . %in% 6:10 ~ "6-10",
-    . %in% 11:20 ~ "11-20",
-    . %in% 21:30 ~ "21-30",
-    . %in% 31:36 ~ "31-36",
-    TRUE ~ "Other"
-  ), .names = "TimeSinceFire")) %>%
-    mutate(across(tsf, ~case_when(
-    tsf %in% 1:5 ~ "1-5",
-    . %in% 6:10 ~ "6-10",
-    . %in% 11:20 ~ "11-20",
-    . %in% 21:36 ~ "21+",
-    TRUE ~ "Other"
-  ), .names = "tsfStd")) %>%
-    mutate(across(tsf, ~case_when(
-    tsf == 1 ~ "1",
-    . %in% 2:5 ~ "2-5",
-    . %in% 6:15 ~ "6-15",
-    . %in% 16:36 ~ "16+",
-    TRUE ~ "Other"
-  ), .names = "tsfAlt")) %>%
-  mutate(across(starts_with("TimeSinceFire"), ~ordered(., levels = c("1", "2-5", "6-10", "11-20", "21-30", "31-36"))),
-         across(starts_with("tsfStd"), ~ordered(., levels = c("1-5", "6-10", "11-20", "21+"))),
-         across(starts_with("tsfAlt"), ~ordered(., levels = c("1", "2-5", "6-15", "16+"))),
-         burned = ordered(burned, levels = c("One", "Two", "Three", "Other")), 
-         bTSF = paste0(burned,"_", TimeSinceFire),
-         bTsfStd = paste0(burned,"_", tsfStd),
-         bTsfAlt = paste0(burned,"_", tsfAlt),
-         sampleYr=2015)  %>%
-    rename(lstMean = mean_2015, refLst= refLst2015) 
-
-
-
-  )
-```
-
-## 2015
-
-```{r}
-( standardPre2014 = burned_lst %>% 
-    filter(maxYr <2014) %>%
-  dplyr::select(ID:maxYr, mean_2014, burned) %>%
-    mutate(refLst2014 = case_when(
-    ECO_NAME %in% ref2014$ECO_NAME ~ ref2014$refLst[match(ECO_NAME, ref2014$ECO_NAME)])) %>%  # Assign value if ID matches
-    mutate(tsf = 2014-maxYr,
-           diffLst= refLst2014-mean_2014) %>%
-    mutate(across(tsf, ~case_when(
-    tsf == 1 ~ "1",
-    . %in% 2:5 ~ "2-5",
-    . %in% 6:10 ~ "6-10",
-    . %in% 11:20 ~ "11-20",
-    . %in% 21:30 ~ "21-30",
-    . %in% 31:36 ~ "31-36",
-    TRUE ~ "Other"
-  ), .names = "TimeSinceFire")) %>%
-    mutate(across(tsf, ~case_when(
-    tsf %in% 1:5 ~ "1-5",
-    . %in% 6:10 ~ "6-10",
-    . %in% 11:20 ~ "11-20",
-    . %in% 21:36 ~ "21+",
-    TRUE ~ "Other"
-  ), .names = "tsfStd")) %>%
-    mutate(across(tsf, ~case_when(
-    tsf == 1 ~ "1",
-    . %in% 2:5 ~ "2-5",
-    . %in% 6:15 ~ "6-15",
-    . %in% 16:36 ~ "16+",
-    TRUE ~ "Other"
-  ), .names = "tsfAlt")) %>%
-  mutate(across(starts_with("TimeSinceFire"), ~ordered(., levels = c("1", "2-5", "6-10", "11-20", "21-30", "31-36"))),
-         across(starts_with("tsfStd"), ~ordered(., levels = c("1-5", "6-10", "11-20", "21+"))),
-         across(starts_with("tsfAlt"), ~ordered(., levels = c("1", "2-5", "6-15", "16+"))),
-         burned = ordered(burned, levels = c("One", "Two", "Three", "Other")), 
-         bTSF = paste0(burned,"_", TimeSinceFire),
-         bTsfStd = paste0(burned,"_", tsfStd),
-         bTsfAlt = paste0(burned,"_", tsfAlt),
-         sampleYr=2014)  %>%
-    rename(lstMean = mean_2014, refLst= refLst2014) 
-
-
-
-  )
-```
-
-
-# Combine Data frames for analysis
-```{r}
-( data2014_2022 = bind_rows(standardPre2022, standardPre2021, standardPre2020, standardPre2019, standardPre2018, standardPre2017, standardPre2016, standardPre2015, standardPre2014) %>% 
-  mutate(bTSF = ordered(bTSF, levels = c("One_1", "One_2-5", "One_6-10", "One_11-20", "One_21-30", "One_31-36", "Two_1",  "Two_2-5",  "Two_6-10", "Two_11-20",  "Two_21-30", "Two_31-36", "Three_1", "Three_2-5", "Three_6-10", "Three_11-20", "Three_21-30")),
-         across(starts_with("bTsfStd"), ~ordered(., levels = c("One_1-5", "One_6-10", "One_11-20", "One_21+", "Two_1-5", "Two_6-10", "Two_11-20", "Two_21+", "Three_1-5", "Three_6-10", "Three_11-20", "Three_21+"))),
-         across(starts_with("bTsfAlt"), ~ordered(., levels = c("One_1", "One_2-5", "One_6-15", "One_16+", "Two_1", "Two_2-5", "Two_6-15", "Two_16+", "Three_1", "Three_2-5", "Three_6-15", "Three_16+"))))
-  
+final_df <- bind_rows(
+  standardPre_data$standardPre2022, standardPre_data$standardPre2021, standardPre_data$standardPre2020, standardPre_data$standardPre2019, 
+  standardPre_data$standardPre2018, standardPre_data$standardPre2017, standardPre_data$standardPre2016, standardPre_data$standardPre2015, 
+  standardPre_data$standardPre2014
 )
+
 ```
 
 ```{r}
-unique(data2014_2022$bTSF)
+final_df
 ```
 
 ```{r}
-recent_2014_2022 = data2014_2022 %>% filter(TimeSinceFire %in% c("1", "2-5"))
-old_2014_2022 = data2014_2022 %>% filter(TimeSinceFire %in% c("6-10", "11-20", "21-30", "31-36"))
+recent_2014_2022 = final_df %>% filter(TimeSinceFire %in% c("1", "2-5"))
+old_2014_2022 = final_df %>% filter(TimeSinceFire %in% c("6-10", "11-20", "21-30", "31-36"))
 ```
 
 # Model Recent time since fire effects
@@ -842,9 +417,7 @@ old_2014_2022 = data2014_2022 %>% filter(TimeSinceFire %in% c("6-10", "11-20", "
 model1 = glm(diffLst ~ bTSF, data = recent_2014_2022, family = gaussian)
 ```
 
-```{r}
-summary(model1)
-```
+
 
 ### Residuals: 
 
@@ -916,7 +489,7 @@ ggsave("../figures/20250306_LSTDifferenceRecentBoreal.png", plot = recent_model1
 ```
 
 ```{r}
-ggsave("../figures/20250306_LSTDifferencerecentRecentBorealPPTSlide.png", plot = recent_model1_plot2, width = 8, height =6, units = c("in"), dpi=600, bg = "white" )
+ggsave("../figures/20250312_LSTDifferencerecentRecentBorealPPTSlide.png", plot = recent_model1_plot2, width = 8, height =6, units = c("in"), dpi=600, bg = "white" )
 ```
 
 
@@ -1130,7 +703,7 @@ compTB
 # Model 4 with Alternate Time Since Fire groups
 
 ```{r}
-model4 = glm(diffLst ~ bTsfAlt, data = data2014_2022, family = gaussian)
+model4 = glm(diffLst ~ bTsfAlt, data = final_df, family = gaussian)
 ```
 
 ```{r}
@@ -1185,7 +758,7 @@ df_emm_model4
 ```
 
 ```{r}
-ggsave("../figures/20250306_LSTDifferenceBorealAltTsfBins.png", plot = model4_Plot, width = 8, height =6, units = c("in"), dpi=600, bg = "white" )
+ggsave("../figures/20250312_LSTDifferenceBorealAltTsfBins.png", plot = model4_Plot, width = 8, height =6, units = c("in"), dpi=600, bg = "white" )
 ```
 
 
