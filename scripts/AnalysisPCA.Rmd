@@ -1,0 +1,369 @@
+---
+title: "PCA Analysis"
+author: "Anna Talucci"
+date: "2025-03-11"
+output: html_document
+---
+
+```{r clear environment, include=FALSE}
+rm(list=ls())
+```
+
+# Overview
+
+PCA of LCC data
+# Packages
+
+```{r}
+library(tidyverse)
+#library(FactoMineR)  # For PCA
+#library(factoextra)  # For visualization
+library(rpart)
+library(rpart.plot)
+library(rattle)
+library(partykit)
+library(ggparty)
+library(e1071)
+library(MASS)
+```
+
+# Data
+```{r}
+lcc = read_csv("../data/LCC_data/LC_Plot_ReburnData_20250311.csv")
+```
+
+```{r}
+unburnList = list.files("../data/unburnedMultiIndex", pattern=".csv$", full.names=TRUE)
+```
+
+```{r}
+
+unburnData = unburnList %>% 
+                map_df(~ read_csv(.x) %>% 
+                mutate(filename = tools::file_path_sans_ext(basename(.x)))) %>%
+                separate(filename, into = c("file", "dataYear"), sep = "_", convert = TRUE, extra = "merge")
+```
+
+```{r}
+csvList = list.files("../data/fieldMultiIndex", pattern=".csv$", full.names=TRUE)
+```
+
+```{r}
+
+combineData = csvList %>% 
+                map_df(~ read_csv(.x) %>% 
+                mutate(filename = tools::file_path_sans_ext(basename(.x)))) %>%
+                separate(filename, into = c("file", "dataYear"), sep = "_", convert = TRUE, extra = "merge")
+```
+
+```{r}
+combineData
+```
+
+```{r}
+( df_burned = combineData %>% 
+    mutate(postYear = rcnt_br +1) %>%
+    dplyr::select(row_id, plot, site, unq_st_, dataYear, rcnt_br, postYear, fire, ba:evi, green, mirbi:nir, red, savi, swir1:thermal, vi43:vi6t) %>%
+    rowwise() %>%
+  mutate(match =  (dataYear %in% postYear)) %>%
+  filter(match) %>% # Keep only rows where any match occurs
+  mutate(match_type = case_when(
+    dataYear %in% postYear ~ "post")) 
+)
+```
+
+```{r}
+( df_unburned = combineData %>% 
+    mutate(preYear = rcnt_br - 1) %>%
+    dplyr::select(row_id, plot, site, unq_st_, dataYear, rcnt_br, preYear, fire, ba:evi, green, mirbi:nir, red, savi, swir1:thermal, vi43:vi6t) %>%
+    rowwise() %>%
+  mutate(match =  (dataYear %in% preYear)) %>%
+  filter(match) %>% # Keep only rows where any match occurs
+  mutate(match_type = case_when(
+    dataYear %in% preYear ~ "pre")) 
+)
+```
+
+
+```{r}
+sort(unique(lcc$second_burn))
+
+lcc %>% filter(second_burn %in% c("2004", "2005", "2007", "2011", "2018"))
+```
+
+```{r}
+( lcc_burns = lcc %>% 
+  mutate(across(c(recent_burn, second_burn, triple_burn), as.numeric, .names = "num_{.col}")) %>%
+  mutate(num_burns = rowSums(!is.na(across(starts_with("num_"))))) %>%
+  dplyr::select(row_id, num_burns, recent_burn, second_burn, triple_burn) )
+```
+
+```{r}
+( lcc_unburn = lcc %>% 
+  mutate(across(c(recent_burn, second_burn, triple_burn), as.numeric, .names = "num_{.col}")) %>%
+  mutate(num_burns = rowSums(!is.na(across(starts_with("num_"))))) %>%
+  dplyr::select(row_id, num_burns, recent_burn, second_burn, triple_burn) )
+```
+
+```{r}
+
+( burnedData = df_burned %>% 
+    left_join(., lcc_burns, by=c("row_id")) %>%
+    dplyr::select(num_burns, ba:vi6t)
+)
+```
+
+```{r}
+( unburnedData = df_unburned %>% 
+    left_join(., lcc_unburn, by=c("row_id")) %>%
+    filter(second_burn != 2018) %>%
+    dplyr::select(num_burns, ba:vi6t) %>%
+    mutate(timesBurned = "control") %>%
+    dplyr::select(timesBurned, ba:vi6t)
+)
+```
+
+
+
+```{r}
+( controlPlots = unburnData %>% 
+    dplyr::select(dataYear, tretmnt, ba, blue, csi, evi, green, mirbi:nir, red, savi, swir1:thermal, vi43:vi6t) %>% 
+    rename(timesBurned=tretmnt) %>%
+    dplyr::select(-dataYear)
+)
+```
+
+
+# SVM Data
+```{r}
+( svm_unburned = unburnedData %>% 
+    mutate(num_burns = 0) %>%
+    dplyr::select(-timesBurned)
+)
+```
+```{r}
+
+( df_svm = burnedData %>% 
+    dplyr::select(num_burns, ba:vi6t) %>%
+    bind_rows(., svm_unburned)
+)
+```
+```{r}
+unique(df_svm$num_burns)
+```
+#  MCA Data
+
+```{r}
+
+( df_MCA = df_burned %>% 
+    left_join(., lcc_burns, by=c("row_id")) %>%
+    mutate(across( starts_with("num_"), ~ case_when(
+    . == 1 ~ "one",
+    . == 2  ~ "two",
+    . == 3 ~ "three",
+    TRUE ~ "other"), .names ="timesBurned")) %>%
+    dplyr::select(timesBurned, ba:vi6t) %>%
+    bind_rows(., unburnedData)
+)
+```
+
+```{r}
+unique(df_MCA$timesBurned)
+```
+# FAMD
+ Factor Analysis of Mixed Data
+
+```{r}
+famd_result <- FAMD(df_MCA, graph = FALSE)
+```
+
+```{r}
+# Scree plot
+fviz_eig(famd_result)
+
+# Visualizing variable contributions (continuous + categorical)
+fviz_famd_var(famd_result, repel = TRUE)
+
+# Visualizing observations
+fviz_famd_ind(famd_result, repel = TRUE)
+
+```
+
+```{r}
+
+fviz_famd_ind(famd_result, 
+              habillage = "timesBurned", # Color by category
+              repel = TRUE, 
+              addEllipses = TRUE) # Adds confidence ellipses around groups
+
+```
+
+
+```{r}
+# quantify separation with clustering
+
+set.seed(17) # For reproducibility
+clust <- kmeans(famd_result$ind$coord, centers = 4) # Adjust centers as needed
+
+# Plot individuals colored by clusters
+fviz_cluster(clust, data = famd_result$ind$coord, geom = "point")
+
+```
+
+# LDA
+
+```{r}
+# Convert the FAMD coordinates to a data frame
+famd_df <- as.data.frame(famd_result$ind$coord)
+
+# Ensure the categorical variable is also in the same data frame
+famd_df$timesBurned <- df_MCA$timesBurned  # Replace with actual variable source
+
+```
+
+```{r}
+
+lda_model <- lda(timesBurned ~ Dim.1 + Dim.2, data = famd_df)
+plot(lda_model)
+
+```
+
+
+# Classificartion Tree 
+
+## Performed on PCA
+
+```{r}
+tree_model <- rpart(timesBurned ~ ., data = famd_df, method = "class")
+
+```
+
+```{r}
+
+# Plot the tree
+rpart.plot(tree_model, type = 3, extra = 101, fallen.leaves = TRUE)
+
+```
+
+```{r}
+
+fancyRpartPlot(tree_model)
+
+```
+
+```{r}
+
+# Convert rpart object to a party object
+party_tree <- as.party(tree_model)
+
+```
+
+```{r}
+
+
+ggparty(party_tree) +
+  geom_edge() +
+  geom_node_label(aes(label = splitvar), ids = "inner") +
+  geom_node_label(aes(label = info), ids = "terminal", size = 3)
+```
+
+
+## Performed on Dataframe
+
+```{r}
+
+model_class <- rpart(timesBurned ~ ., data = df_MCA, method = "class")
+```
+
+```{r}
+
+# Plot the tree
+rpart.plot(model_class, type = 3, extra = 101, fallen.leaves = TRUE)
+
+```
+
+```{r}
+
+```
+
+```{r}
+summary(model_class)
+
+```
+```{r}
+
+fancyRpartPlot(model_class)
+
+```
+
+```{r}
+
+
+# Convert rpart object to a party object
+party_class <- as.party(model_class)
+
+```
+
+```{r}
+
+
+ggparty(party_class) +
+  geom_edge() +
+  geom_node_label(aes(label = splitvar), ids = "inner") +
+  geom_node_label(aes(label = info), ids = "terminal", size = 3)
+```
+
+# SVM Analysis
+
+```{r}
+# Load dataset
+
+
+# Split data into training (80%) and testing (20%)
+set.seed(123)
+train_index <- sample(1:nrow(df_svm), 0.8 * nrow(df_svm))
+train_data <- df_svm[train_index, ]
+test_data <- df_svm[-train_index, ]
+
+# Train SVM model
+svm_model <- svm(num_burns ~ ., data = train_data, kernel = "radial", cost = 1, gamma = 0.1)
+
+# Predict on test data
+predictions <- predict(svm_model, test_data)
+
+# Evaluate model performance
+conf_matrix <- table(Predicted = predictions, Actual = test_data$num_burns)
+print(conf_matrix)
+
+# Calculate accuracy
+accuracy <- sum(diag(conf_matrix)) / sum(conf_matrix)
+print(paste("Accuracy:", round(accuracy * 100, 2), "%"))
+```
+
+```{r}
+tuned_svm <- tune(svm, num_burns ~ ., data = train_data, 
+                  ranges = list(cost = 10^(-1:2), gamma = c(0.1, 0.5, 1, 2)))
+
+# Best model
+best_model <- tuned_svm$best.model
+print(best_model)
+
+```
+
+```{r}
+
+
+# Train SVM model
+svm_model <- svm(num_burns ~ ., data = train_data, kernel = "radial", cost = 100, gamma = 0.5)
+
+# Predict on test data
+predictions <- predict(svm_model, test_data)
+
+# Evaluate model performance
+conf_matrix <- table(Predicted = predictions, Actual = test_data$num_burns)
+print(conf_matrix)
+
+# Calculate accuracy
+accuracy <- sum(diag(conf_matrix)) / sum(conf_matrix)
+print(paste("Accuracy:", round(accuracy * 100, 2), "%"))
+```

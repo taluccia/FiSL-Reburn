@@ -1,0 +1,1247 @@
+---
+title: "LST Pre Post"
+author: "Anna Talucci"
+date: "2025-03-04"
+output: html_document
+---
+
+```{r clear environment, include=FALSE}
+rm(list=ls())
+```
+
+# Overview
+
+
+# Packages
+
+```{r}
+library(tidyverse)
+library(sf)
+library(emmeans) 
+library(statmod)
+library(car)
+
+library(MASS)
+library(cplm)
+library(aod)
+```
+
+# Data
+
+```{r}
+aklst = read_csv('../outputs/cleanedSamplePoints/LstBoreal2013-2022.csv')
+```
+```{r}
+perimeters = st_read("../outputs/boundaries/firePerimeters/akFirePerimeters_1984_2020.shp", "akFirePerimeters_1984_2020")
+```
+
+
+```{r}
+aklst
+```
+
+
+```{r}
+( burned_lst = aklst %>% filter(countYr!=0) )
+( unburned_lst = aklst %>% filter(countYr==0) )
+```
+
+
+# To Points
+
+```{r eval=FALSE, include=FALSE}
+df_to_sf <- function(x){
+  st_as_sf(x, coords = c("longitude","latitude"), crs = 4326, remove = FALSE)
+}
+```
+
+```{r eval=FALSE, include=FALSE}
+( burned_pts = burned_lst %>% df_to_sf() )
+```
+
+```{r eval=FALSE, include=FALSE}
+( perimeters_4 = perimeters %>% select(Event_ID, year, month, day, geometry) )
+```
+
+# Transform projections
+
+```{r eval=FALSE, include=FALSE}
+burned_pts_NAD83 = st_transform(burned_pts, crs = st_crs(perimeters))
+```
+
+```{r eval=FALSE, include=FALSE}
+burned_pts_NAD83
+```
+
+# Join with fire perimeters for fire years
+ **NOT WORKING**
+```{r eval=FALSE, include=FALSE}
+join = st_join(burned_pts_NAD83, perimeters_4, left=TRUE)
+```
+
+```{r eval=FALSE, include=FALSE}
+join
+```
+
+
+# Clean and Organize data for model
+
+```{r}
+burned_lst
+```
+
+```{r}
+sort(unique(burned_lst$maxYr))
+```
+
+## Clean with pre/post
+```{r}
+
+clean_BurnedLst_tsf <- burned_lst %>%
+  dplyr::select(ID, ECO_NAME, countYr, maxYr, mean_2013:mean_2022, burned, TSF, TimeSinceFire) %>%
+  filter(TSF %in% 1:5) %>%
+  mutate(preYear = maxYr - 1,
+         fireYear = maxYr,
+         postYear = maxYr + TSF) %>%
+  pivot_longer(
+    cols = starts_with("mean"),
+    names_to = "LstYear",
+    values_to = "LstValue"
+  ) %>%
+  separate(LstYear, into = c("LstFun", "LstYear"), sep = "_", convert = TRUE, extra = "merge")
+
+```
+
+
+
+```{r}
+# Filter and check matches
+df_filtered <- clean_BurnedLst_tsf %>%
+  #group_by(ID) %>%  # Filter by group
+  rowwise() %>%
+  mutate(match =  (preYear %in% LstYear) |  (postYear %in% LstYear)) %>%
+  filter(match) %>% # Keep only rows where any match occurs
+  mutate(match_type = case_when(
+    preYear %in% LstYear ~ "pre",
+    postYear %in% LstYear ~ "post")) %>% 
+  group_by(ID) #%>%
+  #pivot_wider(names_from = match_type, values_from = LstValue)
+
+# View results
+print(df_filtered)
+```
+
+
+
+```{r}
+( df_wider = df_filtered %>%
+  pivot_wider(names_from = match_type, values_from = c(LstYear, LstValue))
+)
+
+```
+
+
+```{r}
+pre_post_na = df_wider %>% 
+  filter(is.na(LstValue_pre) | is.na(LstValue_post))
+
+print(pre_post_na)
+```
+
+```{r}
+( data4analysis = df_wider %>% 
+  drop_na(LstValue_pre) %>% 
+  drop_na(LstValue_post) %>%
+    mutate(diffLst = LstValue_pre - LstValue_post)
+)
+```
+
+
+```{r}
+( recent = data4analysis %>% 
+  filter(TimeSinceFire %in% c("0", "1", "2-5")) %>% 
+  filter(burned %in% c("Unburned", "One", "Two", "Three")) %>%
+  mutate(TimeSinceFire = factor(TimeSinceFire, levels = c( "0", "1", "2-5")),
+         burned = factor(burned, levels = c( "Unburned", "One", "Two", "Three")),
+         bTSF = paste0(burned,"_", TimeSinceFire)) )
+```
+
+
+# Model Recent time since fire effects
+
+```{r}
+fit1 = glm(diffLst ~ bTSF, data = recent, family = gaussian)
+```
+
+```{r}
+summary(fit1)
+```
+
+### Residuals: 
+
+```{r eval=FALSE, include=FALSE}
+recent$fit1.res = resid(fit1, type = "pearson")
+recent$fit1.fit = fitted(fit1)
+
+sum(residuals(fit1, type="pearson")^2)/fit1$df.res
+
+qplot(fitted(fit1), resid(fit1)) + theme_bw()
+
+```
+
+
+```{r}
+summary(fit1)
+```
+
+```{r}
+emmfit1 = emmeans(fit1, specs = ~ bTSF)
+emmfit1
+```
+```{r}
+dfemmfit1 = as.data.frame(emmfit1)
+
+dfemmfit1.1 = dfemmfit1 %>% mutate(mean=(emmean),
+                  SE=(SE),
+                  LCL=(lower.CL),
+                  UCL=(upper.CL),
+                  bTSF = factor(bTSF, levels = c("Unburned_0", 'One_1', 'One_2-5',  'Two_1', 'Two_2-5', 'Three_1','Three_2-5')))
+
+dfemmfit1.1
+```
+
+#5495CFFF, #F5AF4DFF, #DB4743FF, #7C873EFF, #FEF4D5FF
+```{r}
+allDataFit1Plot = ggplot(data = dfemmfit1.1) + 
+  geom_point(aes(x=bTSF, y=mean, color = bTSF)) +
+  geom_errorbar(aes(x=bTSF, ymin = LCL, ymax = UCL, color = bTSF)) +
+  coord_flip() +
+  scale_color_manual(name= "Time Since Fire", values=c('#DB4743FF','#F5AF4DFF',  '#DB4743FF','#F5AF4DFF', '#DB4743FF','#F5AF4DFF'), labels=c("one year", "2-5 years", "one year", "2-5 years", "one year", "2-5 years")) +
+  labs(x="", y="Land surface temperature differnece (Kelvin)", subtitle = "pre LST - post LST") +
+  scale_x_discrete(labels= c("One", "One", "Two", "Two", "Three", "Three")) +
+    theme_bw() #+
+  #theme(legend.position="none")
+
+allDataFit1Plot
+```
+
+```{r}
+ggsave("../figures/LSTDifferencerecentBoreal_20250305.png", plot = allDataFit1Plot, width = 8, height =6, units = c("in"), dpi=600, bg = "white" )
+```
+
+
+
+```{r}
+(recentLSTPlot = ggplot(data = dfemmfit1.1) + 
+  geom_point(aes(x=bTSF, y=mean, color = bTSF)) +
+  geom_errorbar(aes(x=bTSF, ymin = LCL, ymax = UCL, color = bTSF)) +
+  coord_flip() +
+  scale_color_manual(name= "Time Since Fire", values=c('#d95f02','#7570b3',  '#d95f02','#7570b3', '#d95f02',  '#7570b3'), labels=c("One year", "2-5 years", "One year", "2-5 years", "One year", "2-5 years")) +
+  labs(x="Times burned", y="Land surface Temperature Difference (Kelvin)", subtitle = "Difference = pre LST - post LST") +
+  scale_x_discrete(labels= c("One", "One", "Two", "Two", "Three", "Three")) +
+    theme_bw() +
+   theme( legend.position="right", 
+        legend.text=element_text(size=14), 
+        legend.title=element_text(size=16),
+        legend.key = element_blank()) +
+    theme(axis.title.y = element_text(size = 16, hjust = 0.5, vjust = 1.1),
+          axis.title.x = element_text(size = 16, hjust = 0.5, vjust = 1.1),
+        axis.text.x = element_text(size = 14, color = "black"),
+        axis.text.y = element_text(size = 14, color = "black")) 
+)
+```
+
+```{r}
+ggsave("../figures/20250306_LSTDifferencerecentBorealCompareOneTimeBurnedPPTSlide.png", plot = recentLSTPlot, width = 8, height =6, units = c("in"), dpi=600, bg = "white" )
+```
+
+
+
+
+
+
+## Testing difference in means
+
+```{r}
+emmfit1
+```
+
+```{r}
+One_1 = c(1, 0, 0, 0, 0, 0)
+One_2_5 = c(0, 1, 0, 0, 0, 0)
+Three_1 = c(0, 0, 1, 0, 0, 0)
+Three_2_5 = c(0, 0, 0, 1, 0, 0)
+Two_1 = c(0, 0, 0, 0, 1, 0)
+Two_2_5 = c(0, 0, 0, 0, 0, 1)
+```
+
+
+
+
+
+```{r}
+contrast(emmfit1, method = list("One_1 - Two_1" = One_1 - Two_1,
+                             "One_1 - Three_1" = One_1 - Three_1,
+                             "One_2_5 - Two_2_5" = One_2_5 - Two_2_5,
+                             "One_2_5 - Three_2_5" = One_2_5 - Three_2_5))
+```
+```{r}
+compTB = contrast(emmfit1, method = list("One_1 - Two_1" = One_1 - Two_1,
+                             "One_1 - Three_1" = One_1 - Three_1,
+                             "One_2_5 - Two_2_5" = One_2_5 - Two_2_5,
+                             "One_2_5 - Three_2_5" = One_2_5 - Three_2_5) ,
+         adjust = "mvt") %>%
+     confint()
+
+compTB
+```
+
+
+
+# Standard unburned LST value for difference
+ Standardized chronosequence with 2022 as post fire year
+## Calculate prefire LST from unburned
+
+```{r}
+unburned_lst
+```
+
+```{r}
+unique(unburned_lst$ECO_NAME)
+```
+
+### 2022
+
+```{r}
+( ref2022 = unburned_lst %>% 
+    group_by(ECO_NAME) %>% 
+    summarise(refLst = round(mean(mean_2022),1)) )
+```
+
+### 2021
+
+```{r}
+( ref2021 = unburned_lst %>% 
+    group_by(ECO_NAME) %>% 
+    summarise(refLst = round(mean(mean_2021),1)) )
+```
+
+### 2020
+
+```{r}
+( ref2020 = unburned_lst %>% 
+    group_by(ECO_NAME) %>% 
+    summarise(refLst = round(mean(mean_2020),1)) )
+```
+
+### 2019
+
+```{r}
+( ref2019 = unburned_lst %>% 
+    group_by(ECO_NAME) %>% 
+    summarise(refLst = round(mean(mean_2019),1)) )
+```
+
+### 2018
+
+```{r}
+( ref2018 = unburned_lst %>% 
+    group_by(ECO_NAME) %>% 
+    summarise(refLst = round(mean(mean_2018),1)) )
+```
+
+### 2017
+
+```{r}
+( ref2017 = unburned_lst %>% 
+    group_by(ECO_NAME) %>% 
+    summarise(refLst = round(mean(mean_2017),1)) )
+```
+
+### 2016 
+
+```{r}
+( ref2016 = unburned_lst %>% 
+    group_by(ECO_NAME) %>% 
+    summarise(refLst = round(mean(mean_2016),1)) )
+```
+
+### 2015
+
+```{r}
+( ref2015 = unburned_lst %>% 
+    group_by(ECO_NAME) %>% 
+    summarise(refLst = round(mean(mean_2015),1)) )
+```
+
+### 2014
+
+```{r}
+( ref2014 = unburned_lst %>% 
+    group_by(ECO_NAME) %>% 
+    summarise(refLst = round(mean(mean_2014),1)) )
+```
+
+## Clean with Standard pre year
+
+```{r}
+burned_lst
+```
+
+```{r}
+sort(unique(burned_lst$maxYr))
+```
+
+```{r}
+burned_lst %>% mutate(tsf2022 = 2022-maxYr) %>% group_by(as.factor(tsf2022)) %>% summarise(n=n())
+```
+
+```{r}
+( standardPre2022 = burned_lst %>% 
+  dplyr::select(ID:maxYr, mean_2022, burned) %>%
+    mutate(refLst2022 = case_when(
+    ECO_NAME %in% ref2022$ECO_NAME ~ ref2022$refLst[match(ECO_NAME, ref2022$ECO_NAME)])) %>%  # Assign value if ID matches
+    mutate(tsf = 2022-maxYr,
+           diffLst= refLst2022-mean_2022) %>%
+    mutate(across(tsf, ~case_when(
+    tsf == 1 ~ "1",
+    . %in% 2:5 ~ "2-5",
+    . %in% 6:10 ~ "6-10",
+    . %in% 11:20 ~ "11-20",
+    . %in% 21:30 ~ "21-30",
+    . %in% 31:36 ~ "31-36",
+    TRUE ~ "Other"
+  ), .names = "TimeSinceFire")) %>%
+    mutate(across(tsf, ~case_when(
+    tsf %in% 1:5 ~ "1-5",
+    . %in% 6:10 ~ "6-10",
+    . %in% 11:20 ~ "11-20",
+    . %in% 21:36 ~ "21+",
+    TRUE ~ "Other"
+  ), .names = "tsfStd")) %>%
+    mutate(across(tsf, ~case_when(
+    tsf == 1 ~ "1",
+    . %in% 2:5 ~ "2-5",
+    . %in% 6:15 ~ "6-15",
+    . %in% 16:36 ~ "16+",
+    TRUE ~ "Other"
+  ), .names = "tsfAlt")) %>%
+  mutate(across(starts_with("TimeSinceFire"), ~ordered(., levels = c("1", "2-5", "6-10", "11-20", "21-30", "31-36"))),
+         across(starts_with("tsfStd"), ~ordered(., levels = c("1-5", "6-10", "11-20", "21+"))),
+         across(starts_with("tsfAlt"), ~ordered(., levels = c("1", "2-5", "6-15", "16+"))),
+         burned = ordered(burned, levels = c("One", "Two", "Three", "Other"))) %>%
+    mutate(bTSF = paste0(burned,"_", TimeSinceFire),
+           bTsfStd = paste0(burned,"_", tsfStd),
+           bTsfAlt = paste0(burned,"_", tsfAlt),
+         sampleYr=2022)  %>%
+    rename(lstMean = mean_2022, refLst= refLst2022) 
+
+  )
+```
+
+
+```{r}
+( standardPre2021 = burned_lst %>% 
+    filter(maxYr <2021) %>%
+  dplyr::select(ID:maxYr, mean_2021, burned) %>%
+    mutate(refLst2021 = case_when(
+    ECO_NAME %in% ref2021$ECO_NAME ~ ref2021$refLst[match(ECO_NAME, ref2021$ECO_NAME)])) %>%  # Assign value if ID matches
+    mutate(tsf = 2021-maxYr,
+           diffLst= refLst2021-mean_2021) %>%
+    mutate(across(tsf, ~case_when(
+    tsf == 1 ~ "1",
+    . %in% 2:5 ~ "2-5",
+    . %in% 6:10 ~ "6-10",
+    . %in% 11:20 ~ "11-20",
+    . %in% 21:30 ~ "21-30",
+    . %in% 31:36 ~ "31-36",
+    TRUE ~ "Other"
+  ), .names = "TimeSinceFire")) %>%
+    mutate(across(tsf, ~case_when(
+    tsf %in% 1:5 ~ "1-5",
+    . %in% 6:10 ~ "6-10",
+    . %in% 11:20 ~ "11-20",
+    . %in% 21:36 ~ "21+",
+    TRUE ~ "Other"
+  ), .names = "tsfStd")) %>%
+    mutate(across(tsf, ~case_when(
+    tsf == 1 ~ "1",
+    . %in% 2:5 ~ "2-5",
+    . %in% 6:15 ~ "6-15",
+    . %in% 16:36 ~ "16+",
+    TRUE ~ "Other"
+  ), .names = "tsfAlt")) %>%
+  mutate(across(starts_with("TimeSinceFire"), ~ordered(., levels = c("1", "2-5", "6-10", "11-20", "21-30", "31-36"))),
+         across(starts_with("tsfStd"), ~ordered(., levels = c("1-5", "6-10", "11-20", "21+"))),
+         across(starts_with("tsfAlt"), ~ordered(., levels = c("1", "2-5", "6-15", "16+"))),
+         burned = ordered(burned, levels = c("One", "Two", "Three", "Other"))) %>%
+    mutate(bTSF = paste0(burned,"_", TimeSinceFire),
+           bTsfStd = paste0(burned,"_", tsfStd),
+           bTsfAlt = paste0(burned,"_", tsfAlt),
+         sampleYr=2021)  %>%
+    rename(lstMean = mean_2021, refLst= refLst2021) 
+
+
+  )
+```
+
+```{r}
+( standardPre2020 = burned_lst %>% 
+    filter(maxYr <2020) %>%
+  dplyr::select(ID:maxYr, mean_2020, burned) %>%
+    mutate(refLst2020 = case_when(
+    ECO_NAME %in% ref2020$ECO_NAME ~ ref2020$refLst[match(ECO_NAME, ref2020$ECO_NAME)])) %>%  # Assign value if ID matches
+    mutate(tsf = 2020-maxYr,
+           diffLst= refLst2020-mean_2020) %>%
+    mutate(across(tsf, ~case_when(
+    tsf == 1 ~ "1",
+    . %in% 2:5 ~ "2-5",
+    . %in% 6:10 ~ "6-10",
+    . %in% 11:20 ~ "11-20",
+    . %in% 21:30 ~ "21-30",
+    . %in% 31:36 ~ "31-36",
+    TRUE ~ "Other"
+  ), .names = "TimeSinceFire")) %>%
+    mutate(across(tsf, ~case_when(
+    tsf %in% 1:5 ~ "1-5",
+    . %in% 6:10 ~ "6-10",
+    . %in% 11:20 ~ "11-20",
+    . %in% 21:36 ~ "21+",
+    TRUE ~ "Other"
+  ), .names = "tsfStd")) %>%
+    mutate(across(tsf, ~case_when(
+    tsf == 1 ~ "1",
+    . %in% 2:5 ~ "2-5",
+    . %in% 6:15 ~ "6-15",
+    . %in% 16:36 ~ "16+",
+    TRUE ~ "Other"
+  ), .names = "tsfAlt")) %>%
+  mutate(across(starts_with("TimeSinceFire"), ~ordered(., levels = c("1", "2-5", "6-10", "11-20", "21-30", "31-36"))),
+         across(starts_with("tsfStd"), ~ordered(., levels = c("1-5", "6-10", "11-20", "21+"))),
+         across(starts_with("tsfAlt"), ~ordered(., levels = c("1", "2-5", "6-15", "16+"))),
+         burned = ordered(burned, levels = c("One", "Two", "Three", "Other"))) %>%
+    mutate(bTSF = paste0(burned,"_", TimeSinceFire),
+           bTsfStd = paste0(burned,"_", tsfStd),
+           bTsfAlt = paste0(burned,"_", tsfAlt),
+         sampleYr=2020)  %>%
+    rename(lstMean = mean_2020, refLst= refLst2020) 
+
+
+  )
+```
+
+```{r}
+( standardPre2019 = burned_lst %>% 
+    filter(maxYr <2019) %>%
+  dplyr::select(ID:maxYr, mean_2019, burned) %>%
+    mutate(refLst2019 = case_when(
+    ECO_NAME %in% ref2019$ECO_NAME ~ ref2019$refLst[match(ECO_NAME, ref2019$ECO_NAME)])) %>%  # Assign value if ID matches
+    mutate(tsf = 2019-maxYr,
+           diffLst= refLst2019-mean_2019) %>%
+    mutate(across(tsf, ~case_when(
+    tsf == 1 ~ "1",
+    . %in% 2:5 ~ "2-5",
+    . %in% 6:10 ~ "6-10",
+    . %in% 11:20 ~ "11-20",
+    . %in% 21:30 ~ "21-30",
+    . %in% 31:36 ~ "31-36",
+    TRUE ~ "Other"
+  ), .names = "TimeSinceFire")) %>%
+    mutate(across(tsf, ~case_when(
+    tsf %in% 1:5 ~ "1-5",
+    . %in% 6:10 ~ "6-10",
+    . %in% 11:20 ~ "11-20",
+    . %in% 21:36 ~ "21+",
+    TRUE ~ "Other"
+  ), .names = "tsfStd")) %>%
+    mutate(across(tsf, ~case_when(
+    tsf == 1 ~ "1",
+    . %in% 2:5 ~ "2-5",
+    . %in% 6:15 ~ "6-15",
+    . %in% 16:36 ~ "16+",
+    TRUE ~ "Other"
+  ), .names = "tsfAlt")) %>%
+  mutate(across(starts_with("TimeSinceFire"), ~ordered(., levels = c("1", "2-5", "6-10", "11-20", "21-30", "31-36"))),
+         across(starts_with("tsfStd"), ~ordered(., levels = c("1-5", "6-10", "11-20", "21+"))),
+         across(starts_with("tsfAlt"), ~ordered(., levels = c("1", "2-5", "6-15", "16+"))),
+         burned = ordered(burned, levels = c("One", "Two", "Three", "Other"))) %>%
+    mutate(bTSF = paste0(burned,"_", TimeSinceFire),
+           bTsfStd = paste0(burned,"_", tsfStd),
+           bTsfAlt = paste0(burned,"_", tsfAlt),
+         sampleYr=2019) %>%
+    rename(lstMean = mean_2019, refLst= refLst2019) 
+
+
+  )
+```
+## 2018
+
+```{r}
+( standardPre2018 = burned_lst %>% 
+    filter(maxYr <2018) %>%
+  dplyr::select(ID:maxYr, mean_2018, burned) %>%
+    mutate(refLst2018 = case_when(
+    ECO_NAME %in% ref2018$ECO_NAME ~ ref2018$refLst[match(ECO_NAME, ref2018$ECO_NAME)])) %>%  # Assign value if ID matches
+    mutate(tsf = 2018-maxYr,
+           diffLst= refLst2018-mean_2018) %>%
+    mutate(across(tsf, ~case_when(
+    tsf == 1 ~ "1",
+    . %in% 2:5 ~ "2-5",
+    . %in% 6:10 ~ "6-10",
+    . %in% 11:20 ~ "11-20",
+    . %in% 21:30 ~ "21-30",
+    . %in% 31:36 ~ "31-36",
+    TRUE ~ "Other"
+  ), .names = "TimeSinceFire")) %>%
+    mutate(across(tsf, ~case_when(
+    tsf %in% 1:5 ~ "1-5",
+    . %in% 6:10 ~ "6-10",
+    . %in% 11:20 ~ "11-20",
+    . %in% 21:36 ~ "21+",
+    TRUE ~ "Other"
+  ), .names = "tsfStd")) %>%
+    mutate(across(tsf, ~case_when(
+    tsf == 1 ~ "1",
+    . %in% 2:5 ~ "2-5",
+    . %in% 6:15 ~ "6-15",
+    . %in% 16:36 ~ "16+",
+    TRUE ~ "Other"
+  ), .names = "tsfAlt")) %>%
+  mutate(across(starts_with("TimeSinceFire"), ~ordered(., levels = c("1", "2-5", "6-10", "11-20", "21-30", "31-36"))),
+         across(starts_with("tsfStd"), ~ordered(., levels = c("1-5", "6-10", "11-20", "21+"))),
+         across(starts_with("tsfAlt"), ~ordered(., levels = c("1", "2-5", "6-15", "16+"))),
+         burned = ordered(burned, levels = c("One", "Two", "Three", "Other")), 
+         bTSF = paste0(burned,"_", TimeSinceFire),
+         bTsfStd = paste0(burned,"_", tsfStd),
+         bTsfAlt = paste0(burned,"_", tsfAlt),
+         sampleYr=2018)  %>%
+    rename(lstMean = mean_2018, refLst= refLst2018) 
+
+
+
+  )
+```
+
+
+## 2017
+
+```{r}
+( standardPre2017 = burned_lst %>% 
+    filter(maxYr <2017) %>%
+  dplyr::select(ID:maxYr, mean_2017, burned) %>%
+    mutate(refLst2017 = case_when(
+    ECO_NAME %in% ref2017$ECO_NAME ~ ref2017$refLst[match(ECO_NAME, ref2017$ECO_NAME)])) %>%  # Assign value if ID matches
+    mutate(tsf = 2017-maxYr,
+           diffLst= refLst2017-mean_2017) %>%
+    mutate(across(tsf, ~case_when(
+    tsf == 1 ~ "1",
+    . %in% 2:5 ~ "2-5",
+    . %in% 6:10 ~ "6-10",
+    . %in% 11:20 ~ "11-20",
+    . %in% 21:30 ~ "21-30",
+    . %in% 31:36 ~ "31-36",
+    TRUE ~ "Other"
+  ), .names = "TimeSinceFire")) %>%
+    mutate(across(tsf, ~case_when(
+    tsf %in% 1:5 ~ "1-5",
+    . %in% 6:10 ~ "6-10",
+    . %in% 11:20 ~ "11-20",
+    . %in% 21:36 ~ "21+",
+    TRUE ~ "Other"
+  ), .names = "tsfStd")) %>%
+    mutate(across(tsf, ~case_when(
+    tsf == 1 ~ "1",
+    . %in% 2:5 ~ "2-5",
+    . %in% 6:15 ~ "6-15",
+    . %in% 16:36 ~ "16+",
+    TRUE ~ "Other"
+  ), .names = "tsfAlt")) %>%
+  mutate(across(starts_with("TimeSinceFire"), ~ordered(., levels = c("1", "2-5", "6-10", "11-20", "21-30", "31-36"))),
+         across(starts_with("tsfStd"), ~ordered(., levels = c("1-5", "6-10", "11-20", "21+"))),
+         across(starts_with("tsfAlt"), ~ordered(., levels = c("1", "2-5", "6-15", "16+"))),
+         burned = ordered(burned, levels = c("One", "Two", "Three", "Other")), 
+         bTSF = paste0(burned,"_", TimeSinceFire),
+         bTsfStd = paste0(burned,"_", tsfStd),
+         bTsfAlt = paste0(burned,"_", tsfAlt),
+         sampleYr=2017)  %>%
+    rename(lstMean = mean_2017, refLst= refLst2017) 
+
+
+
+  )
+```
+
+## 2016
+
+```{r}
+( standardPre2016 = burned_lst %>% 
+    filter(maxYr <2016) %>%
+  dplyr::select(ID:maxYr, mean_2016, burned) %>%
+    mutate(refLst2016 = case_when(
+    ECO_NAME %in% ref2016$ECO_NAME ~ ref2016$refLst[match(ECO_NAME, ref2016$ECO_NAME)])) %>%  # Assign value if ID matches
+    mutate(tsf = 2016-maxYr,
+           diffLst= refLst2016-mean_2016) %>%
+    mutate(across(tsf, ~case_when(
+    tsf == 1 ~ "1",
+    . %in% 2:5 ~ "2-5",
+    . %in% 6:10 ~ "6-10",
+    . %in% 11:20 ~ "11-20",
+    . %in% 21:30 ~ "21-30",
+    . %in% 31:36 ~ "31-36",
+    TRUE ~ "Other"
+  ), .names = "TimeSinceFire")) %>%
+    mutate(across(tsf, ~case_when(
+    tsf %in% 1:5 ~ "1-5",
+    . %in% 6:10 ~ "6-10",
+    . %in% 11:20 ~ "11-20",
+    . %in% 21:36 ~ "21+",
+    TRUE ~ "Other"
+  ), .names = "tsfStd")) %>%
+    mutate(across(tsf, ~case_when(
+    tsf == 1 ~ "1",
+    . %in% 2:5 ~ "2-5",
+    . %in% 6:15 ~ "6-15",
+    . %in% 16:36 ~ "16+",
+    TRUE ~ "Other"
+  ), .names = "tsfAlt")) %>%
+  mutate(across(starts_with("TimeSinceFire"), ~ordered(., levels = c("1", "2-5", "6-10", "11-20", "21-30", "31-36"))),
+         across(starts_with("tsfStd"), ~ordered(., levels = c("1-5", "6-10", "11-20", "21+"))),
+         across(starts_with("tsfAlt"), ~ordered(., levels = c("1", "2-5", "6-15", "16+"))),
+         burned = ordered(burned, levels = c("One", "Two", "Three", "Other")), 
+         bTSF = paste0(burned,"_", TimeSinceFire),
+         bTsfStd = paste0(burned,"_", tsfStd),
+         bTsfAlt = paste0(burned,"_", tsfAlt),
+         sampleYr=2016)  %>%
+    rename(lstMean = mean_2016, refLst= refLst2016) 
+
+
+
+  )
+```
+
+
+## 2015
+
+```{r}
+( standardPre2015 = burned_lst %>% 
+    filter(maxYr <2015) %>%
+  dplyr::select(ID:maxYr, mean_2015, burned) %>%
+    mutate(refLst2015 = case_when(
+    ECO_NAME %in% ref2015$ECO_NAME ~ ref2015$refLst[match(ECO_NAME, ref2015$ECO_NAME)])) %>%  # Assign value if ID matches
+    mutate(tsf = 2015-maxYr,
+           diffLst= refLst2015-mean_2015) %>%
+    mutate(across(tsf, ~case_when(
+    tsf == 1 ~ "1",
+    . %in% 2:5 ~ "2-5",
+    . %in% 6:10 ~ "6-10",
+    . %in% 11:20 ~ "11-20",
+    . %in% 21:30 ~ "21-30",
+    . %in% 31:36 ~ "31-36",
+    TRUE ~ "Other"
+  ), .names = "TimeSinceFire")) %>%
+    mutate(across(tsf, ~case_when(
+    tsf %in% 1:5 ~ "1-5",
+    . %in% 6:10 ~ "6-10",
+    . %in% 11:20 ~ "11-20",
+    . %in% 21:36 ~ "21+",
+    TRUE ~ "Other"
+  ), .names = "tsfStd")) %>%
+    mutate(across(tsf, ~case_when(
+    tsf == 1 ~ "1",
+    . %in% 2:5 ~ "2-5",
+    . %in% 6:15 ~ "6-15",
+    . %in% 16:36 ~ "16+",
+    TRUE ~ "Other"
+  ), .names = "tsfAlt")) %>%
+  mutate(across(starts_with("TimeSinceFire"), ~ordered(., levels = c("1", "2-5", "6-10", "11-20", "21-30", "31-36"))),
+         across(starts_with("tsfStd"), ~ordered(., levels = c("1-5", "6-10", "11-20", "21+"))),
+         across(starts_with("tsfAlt"), ~ordered(., levels = c("1", "2-5", "6-15", "16+"))),
+         burned = ordered(burned, levels = c("One", "Two", "Three", "Other")), 
+         bTSF = paste0(burned,"_", TimeSinceFire),
+         bTsfStd = paste0(burned,"_", tsfStd),
+         bTsfAlt = paste0(burned,"_", tsfAlt),
+         sampleYr=2015)  %>%
+    rename(lstMean = mean_2015, refLst= refLst2015) 
+
+
+
+  )
+```
+
+## 2015
+
+```{r}
+( standardPre2014 = burned_lst %>% 
+    filter(maxYr <2014) %>%
+  dplyr::select(ID:maxYr, mean_2014, burned) %>%
+    mutate(refLst2014 = case_when(
+    ECO_NAME %in% ref2014$ECO_NAME ~ ref2014$refLst[match(ECO_NAME, ref2014$ECO_NAME)])) %>%  # Assign value if ID matches
+    mutate(tsf = 2014-maxYr,
+           diffLst= refLst2014-mean_2014) %>%
+    mutate(across(tsf, ~case_when(
+    tsf == 1 ~ "1",
+    . %in% 2:5 ~ "2-5",
+    . %in% 6:10 ~ "6-10",
+    . %in% 11:20 ~ "11-20",
+    . %in% 21:30 ~ "21-30",
+    . %in% 31:36 ~ "31-36",
+    TRUE ~ "Other"
+  ), .names = "TimeSinceFire")) %>%
+    mutate(across(tsf, ~case_when(
+    tsf %in% 1:5 ~ "1-5",
+    . %in% 6:10 ~ "6-10",
+    . %in% 11:20 ~ "11-20",
+    . %in% 21:36 ~ "21+",
+    TRUE ~ "Other"
+  ), .names = "tsfStd")) %>%
+    mutate(across(tsf, ~case_when(
+    tsf == 1 ~ "1",
+    . %in% 2:5 ~ "2-5",
+    . %in% 6:15 ~ "6-15",
+    . %in% 16:36 ~ "16+",
+    TRUE ~ "Other"
+  ), .names = "tsfAlt")) %>%
+  mutate(across(starts_with("TimeSinceFire"), ~ordered(., levels = c("1", "2-5", "6-10", "11-20", "21-30", "31-36"))),
+         across(starts_with("tsfStd"), ~ordered(., levels = c("1-5", "6-10", "11-20", "21+"))),
+         across(starts_with("tsfAlt"), ~ordered(., levels = c("1", "2-5", "6-15", "16+"))),
+         burned = ordered(burned, levels = c("One", "Two", "Three", "Other")), 
+         bTSF = paste0(burned,"_", TimeSinceFire),
+         bTsfStd = paste0(burned,"_", tsfStd),
+         bTsfAlt = paste0(burned,"_", tsfAlt),
+         sampleYr=2014)  %>%
+    rename(lstMean = mean_2014, refLst= refLst2014) 
+
+
+
+  )
+```
+
+
+# Combine Data frames for analysis
+```{r}
+( data2014_2022 = bind_rows(standardPre2022, standardPre2021, standardPre2020, standardPre2019, standardPre2018, standardPre2017, standardPre2016, standardPre2015, standardPre2014) %>% 
+  mutate(bTSF = ordered(bTSF, levels = c("One_1", "One_2-5", "One_6-10", "One_11-20", "One_21-30", "One_31-36", "Two_1",  "Two_2-5",  "Two_6-10", "Two_11-20",  "Two_21-30", "Two_31-36", "Three_1", "Three_2-5", "Three_6-10", "Three_11-20", "Three_21-30")),
+         across(starts_with("bTsfStd"), ~ordered(., levels = c("One_1-5", "One_6-10", "One_11-20", "One_21+", "Two_1-5", "Two_6-10", "Two_11-20", "Two_21+", "Three_1-5", "Three_6-10", "Three_11-20", "Three_21+"))),
+         across(starts_with("bTsfAlt"), ~ordered(., levels = c("One_1", "One_2-5", "One_6-15", "One_16+", "Two_1", "Two_2-5", "Two_6-15", "Two_16+", "Three_1", "Three_2-5", "Three_6-15", "Three_16+"))))
+  
+)
+```
+
+```{r}
+unique(data2014_2022$bTSF)
+```
+
+```{r}
+recent_2014_2022 = data2014_2022 %>% filter(TimeSinceFire %in% c("1", "2-5"))
+old_2014_2022 = data2014_2022 %>% filter(TimeSinceFire %in% c("6-10", "11-20", "21-30", "31-36"))
+```
+
+# Model Recent time since fire effects
+ Match AGU and ABOVE Analaysis format
+```{r}
+model1 = glm(diffLst ~ bTSF, data = recent_2014_2022, family = gaussian)
+```
+
+```{r}
+summary(model1)
+```
+
+### Residuals: 
+
+```{r eval=FALSE, include=FALSE}
+recent$model1.res = resid(model1, type = "pearson")
+recent$model1.fit = fitted(model1)
+
+sum(residuals(model1, type="pearson")^2)/model1$df.res
+
+qplot(fitted(model1), resid(model1)) + theme_bw()
+
+```
+
+```{r}
+emm_model1 = emmeans(model1, specs = ~ bTSF)
+emm_model1
+
+df_emm_model1 = as.data.frame(emm_model1)
+
+df_emm_model1 = df_emm_model1 %>% mutate(mean=(emmean),
+                  SE=(SE),
+                  LCL=(lower.CL),
+                  UCL=(upper.CL),
+                  bTSF = factor(bTSF, levels = c( "One_1", "One_2-5",  "Two_1",  "Two_2-5",  "Three_1", "Three_2-5"))
+                  )
+
+df_emm_model1
+```
+
+## Plots
+```{r}
+recent_model1_plot = ggplot(data = df_emm_model1) + 
+  geom_point(aes(x=bTSF, y=mean, color = bTSF)) +
+  geom_errorbar(aes(x=bTSF, ymin = LCL, ymax = UCL, color = bTSF)) +
+  coord_flip() +
+  scale_color_manual(name= "Time Since Fire", values=c('#DB4743FF','#F5AF4DFF',  '#DB4743FF','#F5AF4DFF', '#DB4743FF','#F5AF4DFF'), labels=c("one year", "2-5 years", "one year", "2-5 years", "one year", "2-5 years")) +
+  labs(x="", y="Land surface temperature differnece (Kelvin)", subtitle = "difference Lst = pre LST - post LST") +
+  scale_x_discrete(labels= c("One", "One", "Two", "Two", "Three", "Three")) +
+    theme_bw() #+
+  #theme(legend.position="none")
+
+recent_model1_plot
+```
+
+```{r}
+ggsave("../figures/20250306_LSTDifferenceRecentBoreal.png", plot = recent_model1_plot, width = 8, height =6, units = c("in"), dpi=600, bg = "white" )
+```
+
+
+
+```{r}
+(recent_model1_plot2 = ggplot(data = df_emm_model1) + 
+  geom_point(aes(x=bTSF, y=mean, color = bTSF)) +
+  geom_errorbar(aes(x=bTSF, ymin = LCL, ymax = UCL, color = bTSF)) +
+  coord_flip() +
+  scale_color_manual(name= "Time Since Fire", values=c('#d95f02','#7570b3',  '#d95f02','#7570b3', '#d95f02',  '#7570b3'), labels=c("One year", "2-5 years")) +
+  labs(x="Times burned", y="Land surface Temperature Difference (Kelvin)", subtitle = "Difference = pre LST - post LST") +
+  scale_x_discrete(labels= c("One", "One", "Two", "Two", "Three", "Three")) +
+    theme_bw() +
+   theme( legend.position="right", 
+        legend.text=element_text(size=14), 
+        legend.title=element_text(size=16),
+        legend.key = element_blank()) +
+    theme(axis.title.y = element_text(size = 16, hjust = 0.5, vjust = 1.1),
+          axis.title.x = element_text(size = 16, hjust = 0.5, vjust = 1.1),
+        axis.text.x = element_text(size = 14, color = "black"),
+        axis.text.y = element_text(size = 14, color = "black")) 
+)
+```
+
+```{r}
+ggsave("../figures/20250306_LSTDifferencerecentRecentBorealPPTSlide.png", plot = recent_model1_plot2, width = 8, height =6, units = c("in"), dpi=600, bg = "white" )
+```
+
+
+
+
+
+
+## Testing difference in means
+
+```{r}
+emm_model1
+```
+
+```{r}
+One_1 = c(1, 0, 0, 0, 0, 0)
+One_2_5 = c(0, 1, 0, 0, 0, 0)
+Three_1 = c(0, 0, 1, 0, 0, 0)
+Three_2_5 = c(0, 0, 0, 1, 0, 0)
+Two_1 = c(0, 0, 0, 0, 1, 0)
+Two_2_5 = c(0, 0, 0, 0, 0, 1)
+
+contrast(emm_model1, method = list("One_1 - Two_1" = One_1 - Two_1,
+                             "One_1 - Three_1" = One_1 - Three_1,
+                             "One_2_5 - Two_2_5" = One_2_5 - Two_2_5,
+                             "One_2_5 - Three_2_5" = One_2_5 - Three_2_5))
+
+contrast(emm_model1, method = list("One_1 - Two_1" = One_1 - Two_1,
+                             "One_1 - Three_1" = One_1 - Three_1,
+                             "One_2_5 - Two_2_5" = One_2_5 - Two_2_5,
+                             "One_2_5 - Three_2_5" = One_2_5 - Three_2_5) ,
+         adjust = "mvt") %>%
+     confint()
+
+
+```
+
+
+
+# Model OLD time since fire effects
+
+```{r}
+unique(old$TimeSinceFiretsf)
+```
+
+```{r}
+model2 = glm(diffLst ~ bTSF, data = old_2014_2022, family = gaussian)
+```
+
+```{r}
+summary(model2)
+```
+
+### Residuals: 
+
+```{r eval=FALSE, include=FALSE}
+recent$model2.res = resid(model2, type = "pearson")
+recent$model2.fit = fitted(model2)
+
+sum(residuals(model2, type="pearson")^2)/model2$df.res
+
+qplot(fitted(model2), resid(model2)) + theme_bw()
+
+```
+
+
+```{r}
+emm_model2 = emmeans(model2, specs = ~ bTSF)
+emm_model2
+
+df_emm_model2 = as.data.frame(emm_model2)
+
+df_emm_model2 = df_emm_model2 %>% mutate(mean=(emmean),
+                  SE=(SE),
+                  LCL=(lower.CL),
+                  UCL=(upper.CL),
+                  bTSF = factor(bTSF, levels = c( "One_6-10", "One_11-20", "One_21-30", "One_31-36",  "Two_6-10",  "Two_11-20","Two_21-30", "Two_31-36",  "Three_6-10", "Three_11-20", "Three_21-30"))
+                  )
+
+df_emm_model2
+```
+
+## Plots
+
+```{r}
+model2_old_Plot = ggplot(data = df_emm_model2 ) + 
+  geom_point(aes(x=bTSF, y=mean, color = bTSF)) +
+  geom_errorbar(aes(x=bTSF, ymin = LCL, ymax = UCL, color = bTSF)) +
+  coord_flip() +
+  scale_color_manual(name= "Time Since Fire", values=c('#02c39a','#00a896',  '#028090','#05668d', '#02c39a','#00a896',  '#028090','#05668d', '#02c39a','#00a896',  '#028090'), labels=c("6-10 year", "11-20 years", "21-30 year", "30-36 years","6-10 year", "11-20 years", "21-30 year", "30-36 years", "6-10 year", "11-20 years", "21-30 year")) +
+  labs(x="", y="Land surface temperature differnece (Kelvin)", subtitle = "difference Lst = pre LST - post LST") +
+  scale_x_discrete(labels= c("One", "One", "One", "One", "Two", "Two", "Two", "Two", "Three", "Three", "Three")) +
+    theme_bw() #+
+  #theme(legend.position="none")
+
+model2_old_Plot
+```
+
+```{r}
+ggsave("../figures/20250306_LSTDifferenceOLDBoreal.png", plot = model2_old_Plot, width = 8, height =6, units = c("in"), dpi=600, bg = "white" )
+```
+
+
+
+# Model 3 with Standard Time Since Fire groups
+
+```{r}
+model3 = glm(diffLst ~ bTsfStd, data = data2014_2022, family = gaussian)
+```
+
+```{r}
+summary(model3)
+```
+
+### Residuals: 
+
+```{r eval=FALSE, include=FALSE}
+recent$model3.res = resid(model3, type = "pearson")
+recent$model3.fit = fitted(model3)
+
+sum(residuals(model3, type="pearson")^2)/model3$df.res
+
+qplot(fitted(model3), resid(model3)) + theme_bw()
+
+```
+
+
+```{r}
+emm_model3 = emmeans(model3, specs = ~ bTsfStd)
+emm_model3
+
+df_emm_model3 = as.data.frame(emm_model3)
+
+df_emm_model3 = df_emm_model3 %>% mutate(mean=(emmean),
+                  SE=(SE),
+                  LCL=(lower.CL),
+                  UCL=(upper.CL),
+                  bTsfStd = factor(bTsfStd, levels = c("One_1-5", "One_6-10", "One_11-20", "One_21+", "Two_1-5", "Two_6-10", "Two_11-20", "Two_21+", "Three_1-5", "Three_6-10", "Three_11-20", "Three_21+"))
+                  )
+
+df_emm_model3
+```
+
+## Plots
+
+```{r}
+( Model3_Plot = ggplot(data = df_emm_model3 ) + 
+  geom_point(aes(x=bTsfStd, y=mean, color = bTsfStd)) +
+  geom_errorbar(aes(x=bTsfStd, ymin = LCL, ymax = UCL, color = bTsfStd)) +
+  coord_flip() +
+  scale_color_manual(name= "Time Since Fire", values=c('#f79256','#fbd1a2',  '#7dcfb6','#00b2ca','#f79256','#fbd1a2',  '#7dcfb6','#00b2ca','#f79256','#fbd1a2',  '#7dcfb6','#00b2ca'), labels=c("1-5 years", "6-10 years", "11-20 years", "21+ years","1-5 years", "6-10 years", "11-20 years", "21+ years", "1-5 years", "6-10 years", "11-20 years", "21+ years")) +
+  labs(x="", y="Land surface temperature differnece (Kelvin)", subtitle = "difference Lst = pre LST - post LST") +
+  scale_x_discrete(labels= c("One", "One", "One", "One", "Two", "Two", "Two", "Two", "Three", "Three","Three", "Three")) +
+    theme_bw() #+
+  #theme(legend.position="none")
+
+)
+
+
+```
+
+```{r}
+ggsave("../figures/20250306_LSTDifferenceBorealStdTsfBins.png", plot = Model3_Plot, width = 8, height =6, units = c("in"), dpi=600, bg = "white" )
+```
+
+
+## Testing difference in means
+
+```{r}
+emm_model3
+```
+
+```{r}
+One_1_5 =  c(1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0)
+One_6_10 = c(0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0)
+One_11_20 =c(0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0)
+One_21_36 =c(0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0)
+Two_1_5 =  c(0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0)
+Two_6_10 = c(0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0)
+Two_11_20 =c(0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0)
+Two_21_36 =c(0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0)
+Three_1_5 =c(0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0)
+Three_6_10 =c(0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0)
+Three_11_20 =  c(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0)
+Three_21_36 = c(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1)
+```
+
+
+
+
+**RECALCULATE**
+```{r}
+contrast(emm_model3, method = list("One_1 - Two_1" = One_1 - Two_1,
+                             "One_1 - Three_1" = One_1 - Three_1,
+                             "One_2_5 - Two_2_5" = One_2_5 - Two_2_5,
+                             "One_2_5 - Three_2_5" = One_2_5 - Three_2_5))
+```
+```{r}
+compTB = contrast(emm_model3, method = list("One_1 - Two_1" = One_1 - Two_1,
+                             "One_1 - Three_1" = One_1 - Three_1,
+                             "One_2_5 - Two_2_5" = One_2_5 - Two_2_5,
+                             "One_2_5 - Three_2_5" = One_2_5 - Three_2_5) ,
+         adjust = "mvt") %>%
+     confint()
+
+compTB
+```
+
+
+
+
+# Model 4 with Alternate Time Since Fire groups
+
+```{r}
+model4 = glm(diffLst ~ bTsfAlt, data = data2014_2022, family = gaussian)
+```
+
+```{r}
+summary(model4)
+```
+
+### Residuals: 
+
+```{r eval=FALSE, include=FALSE}
+recent$model4.res = resid(model4, type = "pearson")
+recent$model4.fit = fitted(model4)
+
+sum(residuals(model4, type="pearson")^2)/model4$df.res
+
+qplot(fitted(model4), resid(model4)) + theme_bw()
+
+```
+
+
+```{r}
+emm_model4 = emmeans(model4, specs = ~ bTsfAlt)
+emm_model4
+
+df_emm_model4 = as.data.frame(emm_model4)
+
+df_emm_model4 = df_emm_model4 %>% mutate(mean=(emmean),
+                  SE=(SE),
+                  LCL=(lower.CL),
+                  UCL=(upper.CL),
+                  bTsfStd = factor(bTsfAlt, levels = c("One_1", "One_2-5", "One_6-15", "One_16+", "Two_1", "Two_2-5", "Two_6-15", "Two_16+", "Three_1", "Three_2-5", "Three_6-15", "Three_16+"))
+                  )
+
+df_emm_model4
+```
+
+## Plots
+
+```{r}
+( model4_Plot = ggplot(data = df_emm_model4 ) + 
+  geom_point(aes(x=bTsfAlt, y=mean, color = bTsfAlt)) +
+  geom_errorbar(aes(x=bTsfAlt, ymin = LCL, ymax = UCL, color = bTsfAlt)) +
+  coord_flip() +
+  scale_color_manual(name= "Time Since Fire", values=c('#f79256','#fbd1a2',  '#7dcfb6','#00b2ca','#f79256','#fbd1a2',  '#7dcfb6','#00b2ca','#f79256','#fbd1a2',  '#7dcfb6','#00b2ca'), labels=c("1 year", "2-5 years", "6-15 years", "16+ years", "1 year", "2-5 years", "6-15 years", "16+ years", "1 year", "2-5 years", "6-15 years", "16+ years")) +
+  labs(x="", y="Land surface temperature differnece (Kelvin)", subtitle = "difference Lst = pre LST - post LST") +
+  scale_x_discrete(labels= c("One", "One", "One", "One", "Two", "Two", "Two", "Two", "Three", "Three","Three", "Three")) +
+    theme_bw() #+
+  #theme(legend.position="none")
+
+)
+
+
+```
+
+```{r}
+ggsave("../figures/20250306_LSTDifferenceBorealAltTsfBins.png", plot = model4_Plot, width = 8, height =6, units = c("in"), dpi=600, bg = "white" )
+```
+
+
+## Testing difference in means
+
+```{r}
+emm_model4
+```
+
+```{r}
+One_1 =  c(1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0)
+One_2_5 = c(0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0)
+One_6_15 =c(0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0)
+One_16_36 =c(0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0)
+Two_1 =  c(0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0)
+Two_2_5 = c(0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0)
+Two_6_15 =c(0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0)
+Two_16_36 =c(0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0)
+Three_1 =c(0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0)
+Three_2_5 =c(0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0)
+Three_6_15 =  c(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0)
+Three_16_36 = c(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1)
+```
+
+
+
+
+**RECALCULATE**
+```{r}
+contrast(emm_model4, method = list("One_1 - Two_1" = One_1 - Two_1,
+                             "One_1 - Three_1" = One_1 - Three_1,
+                             "One_2_5 - Two_2_5" = One_2_5 - Two_2_5,
+                             "One_2_5 - Three_2_5" = One_2_5 - Three_2_5,
+                             "One_6_15 - Two_6_15" = One_6_15 - Two_6_15,
+                             "One_6_15 - Three_6_15" = One_6_15 - Three_6_15,
+                             "One_16_36 - Two_16_36" = One_16_36 - Two_16_36,
+                             "One__16_36 - Three_16_36" = One_16_36 - Three_16_36))
+```
+```{r}
+compTB = contrast(emm_model4, method = list("One_1 - Two_1" = One_1 - Two_1,
+                             "One_1 - Three_1" = One_1 - Three_1,
+                             "One_2_5 - Two_2_5" = One_2_5 - Two_2_5,
+                             "One_2_5 - Three_2_5" = One_2_5 - Three_2_5) ,
+         adjust = "mvt") %>%
+     confint()
+
+compTB
+```
+
+
+
+
+
+
+
+
+
+
+
