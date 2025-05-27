@@ -48,18 +48,12 @@ library(yardstick)
 allData = read_csv("../outputs/cleanedSamplePoints/2025-05-17sampledMultiIndexAK_delta_post.csv")
 ```
 
-
-
-
-
 # View Data
 
-
-
 ```{r}
-#( allData = allData %>% dplyr::select(-row_id) %>% drop_na() )
-( deltaData = allData %>% dplyr::select(contains("diff"), tx) %>%  drop_na() )
-#( postData= allData %>% dplyr::select(-row_id) %>% drop_na() )
+( allData = allData %>% dplyr::select(-row_id) %>% drop_na() %>% mutate(tx = as.factor(tx)) )
+#( deltaData = allData %>% dplyr::select(contains("diff"), tx) %>%  drop_na() %>% mutate(tx = as.factor(tx)) )
+#( postData= allData %>% dplyr::select(-row_id) %>% dplyr::select(-contains("diff")) %>% drop_na() %>% mutate(tx = as.factor(tx)) )
 ```
 
 
@@ -69,7 +63,7 @@ allData = read_csv("../outputs/cleanedSamplePoints/2025-05-17sampledMultiIndexAK
 # Set seed for reproducibility
 set.seed(123)
 
-df= deltaData
+df= allData
 
 # Split data
 df_split <- initial_split(df, prop = 0.8, strata = tx)
@@ -102,7 +96,7 @@ tree_spec <- decision_tree(cost_complexity = tune(), tree_depth = tune()) %>%
   set_mode("classification")
 # Random Forest
 rf_spec <- rand_forest(mtry = tune(), min_n = tune(), trees = 500) %>%
-  set_engine("ranger") %>%
+  set_engine("ranger", importance = "impurity") %>%
   set_mode("classification")
 # Gradient Boosted Trees (XGBoost)
 xgb_spec <- boost_tree(trees = 500, learn_rate = tune(), mtry = tune(), tree_depth = tune()) %>%
@@ -154,8 +148,65 @@ best_models <- results_df %>%
 print(best_models)
 ```
 
-```{r}
+```{r eval=FALSE, include=FALSE}
 write.csv(best_models, '../outputs/MLselection/2025-05-19_MLSelection_deltaVariablesOnly.csv', row.names=F)
 ```
 
+
+# Fun RF model
+
+```{r}
+# Extract best parameters for random forest based on ROC AUC
+best_rf_params <- select_best(tune_results$rf, metric = "roc_auc")
+print(best_rf_params)
+
+```
+
+```{r}
+# Finalize the rf workflow
+final_rf_wf <- finalize_workflow(rf_wf, best_rf_params)
+
+```
+
+```{r}
+# Fit the finalized random forest model
+final_rf_fit <- fit(final_rf_wf, data = df_train)
+
+```
+
+```{r}
+# Predict on test data
+( rf_preds <- predict(final_rf_fit, df_test, type = "prob") %>%
+  bind_cols(predict(final_rf_fit, df_test)) %>%
+  bind_cols(df_test)
+)
+```
+```{r}
+roc_auc(rf_preds, truth = tx, .pred_burned)
+```
+
+```{r}
+# Evaluate performance
+library(yardstick)
+rf_metrics <- rf_preds %>%
+  metrics(truth = tx, estimate = .pred_class, .pred_burned) %>%  # change `.pred_1` to your positive class
+  bind_rows(roc_auc(rf_preds, truth = tx, .pred_burned))          # change `.pred_1` as needed
+print(rf_metrics)
+
+```
+
+```{r}
+final_rf_fit %>%
+  extract_fit_parsnip() %>%
+  vip() +
+  ggtitle("All indices (post and delta)")
+```
+
+```{r}
+final_rf_fit %>%
+  extract_fit_parsnip() %>%
+  vip(num_features = 20) + # Top 20 important features
+  ggtitle("All indices (post and delta)") 
+
+```
 **THE END**
