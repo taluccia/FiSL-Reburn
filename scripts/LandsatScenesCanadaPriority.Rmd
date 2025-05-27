@@ -27,6 +27,10 @@ boreal = st_read("../outputs/boundaries/landsatScenes/selectLandsatScenes.shp", 
 ecozones = st_read("../data/spatialData/dire_ecoregs_caea/dire_ecoregs_caea.shp", "dire_ecoregs_caea")
 ```
 
+```{r}
+above = st_read("../data/ABoVE_Study_Domain/ABoVE_Study_Domain.shp", "ABoVE_Study_Domain")
+```
+
 # Data Attributes
 
 ```{r}
@@ -49,6 +53,7 @@ projection = st_crs(boreal)
 
 ```{r}
 ecozones_wgs84 = st_transform(ecozones, projection)
+above_wgs84 = st_transform(above, projection)
 ```
 
 ```{r}
@@ -65,16 +70,19 @@ ecozones_wgs84
 ( join1 = st_join(can, ecozones_wgs84) )
 ```
 
+```{r}
+( join2 = st_join(join1, above_wgs84) )
+```
 
 ```{r}
-( direScenes = join1 %>% 
+( direScenes = join2 %>% 
     st_drop_geometry() %>% 
     drop_na(NA_L2NAME) %>% 
-    select(PATH, ROW, PR, ECO_NAME, NA_L2NAME) %>% 
+    select(PATH, ROW, PR, ECO_NAME, NA_L2NAME, Region) %>% 
     filter(!duplicated(PR))
   )
 ```
 
 ```{r}
-write.csv(direScenes, '../outputs/landsatScenes/CanadaDIREPriority.csv', row.names=F)
+write.csv(direScenes, '../outputs/landsatScenes/2025-05-14_CanadaDIREPriorityABoVERegion.csv', row.names=F)
 ```

@@ -28,6 +28,8 @@ library(aod)
 
 # Data
 
+## Read in
+
 ```{r}
 aklst = read_csv('../outputs/cleanedSamplePoints/LstBoreal2013-2022.csv')
 ```
@@ -35,54 +37,18 @@ aklst = read_csv('../outputs/cleanedSamplePoints/LstBoreal2013-2022.csv')
 perimeters = st_read("../outputs/boundaries/firePerimeters/akFirePerimeters_1984_2020.shp", "akFirePerimeters_1984_2020")
 ```
 
+## View
 
 ```{r}
 aklst
 ```
 
+## Split data into burned unburned
 
 ```{r}
 ( burned_lst = aklst %>% filter(countYr!=0) )
 ( unburned_lst = aklst %>% filter(countYr==0) )
 ```
-
-
-# To Points
-
-```{r eval=FALSE, include=FALSE}
-df_to_sf <- function(x){
-  st_as_sf(x, coords = c("longitude","latitude"), crs = 4326, remove = FALSE)
-}
-```
-
-```{r eval=FALSE, include=FALSE}
-( burned_pts = burned_lst %>% df_to_sf() )
-```
-
-```{r eval=FALSE, include=FALSE}
-( perimeters_4 = perimeters %>% select(Event_ID, year, month, day, geometry) )
-```
-
-# Transform projections
-
-```{r eval=FALSE, include=FALSE}
-burned_pts_NAD83 = st_transform(burned_pts, crs = st_crs(perimeters))
-```
-
-```{r eval=FALSE, include=FALSE}
-burned_pts_NAD83
-```
-
-# Join with fire perimeters for fire years
- **NOT WORKING**
-```{r eval=FALSE, include=FALSE}
-join = st_join(burned_pts_NAD83, perimeters_4, left=TRUE)
-```
-
-```{r eval=FALSE, include=FALSE}
-join
-```
-
 
 # Clean and Organize data for model
 
@@ -94,210 +60,11 @@ burned_lst
 sort(unique(burned_lst$maxYr))
 ```
 
-## Clean with pre/post
 ```{r}
-
-clean_BurnedLst_tsf <- burned_lst %>%
-  dplyr::select(ID, ECO_NAME, countYr, maxYr, mean_2013:mean_2022, burned, TSF, TimeSinceFire) %>%
-  filter(TSF %in% 1:5) %>%
-  mutate(preYear = maxYr - 1,
-         fireYear = maxYr,
-         postYear = maxYr + TSF) %>%
-  pivot_longer(
-    cols = starts_with("mean"),
-    names_to = "LstYear",
-    values_to = "LstValue"
-  ) %>%
-  separate(LstYear, into = c("LstFun", "LstYear"), sep = "_", convert = TRUE, extra = "merge")
-
+burned_lst %>% mutate(tsf2022 = 2022-maxYr) %>% group_by(as.factor(tsf2022)) %>% summarise(n=n())
 ```
 
-
-
-```{r}
-# Filter and check matches
-df_filtered <- clean_BurnedLst_tsf %>%
-  #group_by(ID) %>%  # Filter by group
-  rowwise() %>%
-  mutate(match =  (preYear %in% LstYear) |  (postYear %in% LstYear)) %>%
-  filter(match) %>% # Keep only rows where any match occurs
-  mutate(match_type = case_when(
-    preYear %in% LstYear ~ "pre",
-    postYear %in% LstYear ~ "post")) %>% 
-  group_by(ID) #%>%
-  #pivot_wider(names_from = match_type, values_from = LstValue)
-
-# View results
-print(df_filtered)
-```
-
-
-
-```{r}
-( df_wider = df_filtered %>%
-  pivot_wider(names_from = match_type, values_from = c(LstYear, LstValue))
-)
-
-```
-
-
-```{r}
-pre_post_na = df_wider %>% 
-  filter(is.na(LstValue_pre) | is.na(LstValue_post))
-
-print(pre_post_na)
-```
-
-```{r}
-( data4analysis = df_wider %>% 
-  drop_na(LstValue_pre) %>% 
-  drop_na(LstValue_post) %>%
-    mutate(diffLst = LstValue_pre - LstValue_post)
-)
-```
-
-
-```{r}
-( recent = data4analysis %>% 
-  filter(TimeSinceFire %in% c("0", "1", "2-5")) %>% 
-  filter(burned %in% c("Unburned", "One", "Two", "Three")) %>%
-  mutate(TimeSinceFire = factor(TimeSinceFire, levels = c( "0", "1", "2-5")),
-         burned = factor(burned, levels = c( "Unburned", "One", "Two", "Three")),
-         bTSF = paste0(burned,"_", TimeSinceFire)) )
-```
-
-
-# Model Recent time since fire effects
-
-```{r}
-fit1 = glm(diffLst ~ bTSF, data = recent, family = gaussian)
-```
-
-
-### Residuals: 
-
-```{r eval=FALSE, include=FALSE}
-recent$fit1.res = resid(fit1, type = "pearson")
-recent$fit1.fit = fitted(fit1)
-
-sum(residuals(fit1, type="pearson")^2)/fit1$df.res
-
-qplot(fitted(fit1), resid(fit1)) + theme_bw()
-
-```
-
-
-```{r}
-summary(fit1)
-```
-
-```{r}
-emmfit1 = emmeans(fit1, specs = ~ bTSF)
-emmfit1
-```
-```{r}
-dfemmfit1 = as.data.frame(emmfit1)
-
-dfemmfit1.1 = dfemmfit1 %>% mutate(mean=(emmean),
-                  SE=(SE),
-                  LCL=(lower.CL),
-                  UCL=(upper.CL),
-                  bTSF = factor(bTSF, levels = c("Unburned_0", 'One_1', 'One_2-5',  'Two_1', 'Two_2-5', 'Three_1','Three_2-5')))
-
-dfemmfit1.1
-```
-
-
-```{r}
-allDataFit1Plot = ggplot(data = dfemmfit1.1) + 
-  geom_point(aes(x=bTSF, y=mean, color = bTSF)) +
-  geom_errorbar(aes(x=bTSF, ymin = LCL, ymax = UCL, color = bTSF)) +
-  coord_flip() +
-  scale_color_manual(name= "Time Since Fire", values=c('#DB4743FF','#F5AF4DFF',  '#DB4743FF','#F5AF4DFF', '#DB4743FF','#F5AF4DFF'), labels=c("one year", "2-5 years", "one year", "2-5 years", "one year", "2-5 years")) +
-  labs(x="", y="Land surface temperature differnece (Kelvin)", subtitle = "pre LST - post LST") +
-  scale_x_discrete(labels= c("One", "One", "Two", "Two", "Three", "Three")) +
-    theme_bw() #+
-  #theme(legend.position="none")
-
-allDataFit1Plot
-```
-
-```{r}
-ggsave("../figures/LSTDifferencerecentBoreal_20250305.png", plot = allDataFit1Plot, width = 8, height =6, units = c("in"), dpi=600, bg = "white" )
-```
-
-
-
-```{r}
-(recentLSTPlot = ggplot(data = dfemmfit1.1) + 
-  geom_point(aes(x=bTSF, y=mean, color = bTSF)) +
-  geom_errorbar(aes(x=bTSF, ymin = LCL, ymax = UCL, color = bTSF)) +
-  coord_flip() +
-  scale_color_manual(name= "Time Since Fire", values=c('#d95f02','#7570b3',  '#d95f02','#7570b3', '#d95f02',  '#7570b3'), labels=c("One year", "2-5 years", "One year", "2-5 years", "One year", "2-5 years")) +
-  labs(x="Times burned", y="Land surface Temperature Difference (Kelvin)", subtitle = "Difference = pre LST - post LST") +
-  scale_x_discrete(labels= c("One", "One", "Two", "Two", "Three", "Three")) +
-    theme_bw() +
-   theme( legend.position="right", 
-        legend.text=element_text(size=14), 
-        legend.title=element_text(size=16),
-        legend.key = element_blank()) +
-    theme(axis.title.y = element_text(size = 16, hjust = 0.5, vjust = 1.1),
-          axis.title.x = element_text(size = 16, hjust = 0.5, vjust = 1.1),
-        axis.text.x = element_text(size = 14, color = "black"),
-        axis.text.y = element_text(size = 14, color = "black")) 
-)
-```
-
-```{r}
-ggsave("../figures/20250306_LSTDifferencerecentBorealCompareOneTimeBurnedPPTSlide.png", plot = recentLSTPlot, width = 8, height =6, units = c("in"), dpi=600, bg = "white" )
-```
-
-
-## Testing difference in means
-
-```{r}
-emmfit1
-```
-
-```{r}
-One_1 = c(1, 0, 0, 0, 0, 0)
-One_2_5 = c(0, 1, 0, 0, 0, 0)
-Three_1 = c(0, 0, 1, 0, 0, 0)
-Three_2_5 = c(0, 0, 0, 1, 0, 0)
-Two_1 = c(0, 0, 0, 0, 1, 0)
-Two_2_5 = c(0, 0, 0, 0, 0, 1)
-```
-
-```{r}
-contrast(emmfit1, method = list("One_1 - Two_1" = One_1 - Two_1,
-                             "One_1 - Three_1" = One_1 - Three_1,
-                             "One_2_5 - Two_2_5" = One_2_5 - Two_2_5,
-                             "One_2_5 - Three_2_5" = One_2_5 - Three_2_5))
-```
-```{r}
-compTB = contrast(emmfit1, method = list("One_1 - Two_1" = One_1 - Two_1,
-                             "One_1 - Three_1" = One_1 - Three_1,
-                             "One_2_5 - Two_2_5" = One_2_5 - Two_2_5,
-                             "One_2_5 - Three_2_5" = One_2_5 - Three_2_5) ,
-         adjust = "mvt") %>%
-     confint()
-
-compTB
-```
-
-
-
-# Standard unburned LST value for difference
- Standardized chronosequence with 2022 as post fire year
-## Calculate prefire LST from unburned
-
-```{r}
-unburned_lst
-```
-
-```{r}
-unique(unburned_lst$ECO_NAME)
-```
+## ref year for pre-post calculation
 
 ```{r}
 calculate_refLst <- function(year) {
@@ -312,20 +79,7 @@ ref_data <- setNames(lapply(years, calculate_refLst), paste0("ref", years))
 ref_data
 ```
 
-## Clean with Standard pre year
-
-```{r}
-burned_lst
-```
-
-```{r}
-sort(unique(burned_lst$maxYr))
-```
-
-```{r}
-burned_lst %>% mutate(tsf2022 = 2022-maxYr) %>% group_by(as.factor(tsf2022)) %>% summarise(n=n())
-```
-
+## Function for tsf bins
 ```{r}
 calculate_standardPre <- function(year) {
   ref_year <- ref_data[[paste0("ref", year)]]
@@ -337,7 +91,8 @@ calculate_standardPre <- function(year) {
     )) %>%
     mutate(
       tsf = year - maxYr,
-      diffLst = refLst - get(paste0("mean_", year))
+      pre_post_Lst = refLst - get(paste0("mean_", year)),
+      post_pre_Lst =  get(paste0("mean_", year)) - refLst
     ) %>%
     mutate(
       TimeSinceFire = case_when(
@@ -392,7 +147,7 @@ standardPre_data <- setNames(lapply(years, calculate_standardPre), paste0("stand
 standardPre_data
 ```
 
-
+## Creat final DF
 ```{r}
 final_df <- bind_rows(
   standardPre_data$standardPre2022, standardPre_data$standardPre2021, standardPre_data$standardPre2020, standardPre_data$standardPre2019, 
@@ -407,29 +162,271 @@ final_df
 ```
 
 ```{r}
-recent_2014_2022 = final_df %>% filter(TimeSinceFire %in% c("1", "2-5"))
-old_2014_2022 = final_df %>% filter(TimeSinceFire %in% c("6-10", "11-20", "21-30", "31-36"))
+( recent_2014_2022 = final_df %>% filter(tsf <=5) )
+( old_2014_2022 = final_df %>% filter(tsf >=5) )
 ```
 
-# Model Recent time since fire effects
- Match AGU and ABOVE Analaysis format
+# Absolute
+
+## Model Recent time since fire effects
+
 ```{r}
-model1 = glm(diffLst ~ bTSF, data = recent_2014_2022, family = gaussian)
+fit1 = glm(lstMean ~ bTSF, data = recent_2014_2022, family = gaussian)
 ```
-
 
 
 ### Residuals: 
 
-```{r eval=FALSE, include=FALSE}
-recent$model1.res = resid(model1, type = "pearson")
-recent$model1.fit = fitted(model1)
+```{r}
+summary(fit1)
+
+recent_2014_2022$fit1.res = resid(fit1, type = "pearson")
+recent_2014_2022$fit1.fit = fitted(fit1)
+
+sum(residuals(fit1, type="pearson")^2)/fit1$df.res
+
+qplot(fitted(fit1), resid(fit1)) + theme_bw()
+
+```
+
+### Calculate Marginal means for difference test
+
+```{r}
+emmfit1 = emmeans(fit1, specs = ~ bTSF)
+emmfit1
+
+dfemmfit1 = as.data.frame(emmfit1)
+
+dfemmfit1.1 = dfemmfit1 %>% mutate(mean=(emmean),
+                  SE=(SE),
+                  LCL=(lower.CL),
+                  UCL=(upper.CL),
+                  bTSF = factor(bTSF, levels = c("Unburned_0", 'One_1', 'One_2-5',  'Two_1', 'Two_2-5', 'Three_1','Three_2-5')))
+
+dfemmfit1.1
+```
+
+```{r}
+One_1 = c(1, 0, 0, 0, 0, 0)
+One_2_5 = c(0, 1, 0, 0, 0, 0)
+Three_1 = c(0, 0, 1, 0, 0, 0)
+Three_2_5 = c(0, 0, 0, 1, 0, 0)
+Two_1 = c(0, 0, 0, 0, 1, 0)
+Two_2_5 = c(0, 0, 0, 0, 0, 1)
+
+```
+
+
+```{r}
+contrast(emmfit1, method = list("One_1 - Two_1" = One_1 - Two_1,
+                             "One_1 - Three_1" = One_1 - Three_1,
+                             "One_2_5 - Two_2_5" = One_2_5 - Two_2_5,
+                             "One_2_5 - Three_2_5" = One_2_5 - Three_2_5))
+
+contrast(emmfit1, method = list("One_1 - Two_1" = One_1 - Two_1,
+                             "One_1 - Three_1" = One_1 - Three_1,
+                             "One_2_5 - Two_2_5" = One_2_5 - Two_2_5,
+                             "One_2_5 - Three_2_5" = One_2_5 - Three_2_5) ,
+         adjust = "mvt") %>%
+     confint()
+
+```
+
+### Plots 
+```{r}
+ggplot(data = dfemmfit1.1) + 
+  geom_point(aes(x=bTSF, y=mean, color = bTSF)) +
+  geom_errorbar(aes(x=bTSF, ymin = LCL, ymax = UCL, color = bTSF)) +
+  coord_flip()
+```
+
+```{r}
+allDataFit1Plot = ggplot(data = dfemmfit1.1) + 
+  geom_point(aes(x=bTSF, y=mean, color = bTSF)) +
+  geom_errorbar(aes(x=bTSF, ymin = LCL, ymax = UCL, color = bTSF)) +
+  coord_flip() +
+  scale_color_manual(name= "Time Since Fire", values=c('#DB4743FF','#F5AF4DFF',  '#DB4743FF','#F5AF4DFF', '#DB4743FF','#F5AF4DFF'), labels=c( "one year", "2-5 years")) +
+  labs(x="", y="Land surface temperature (Kelvin)") +
+  scale_x_discrete(labels= c( "One", "One", "Two", "Two", "Three", "Three")) +
+    theme_bw() #+
+  #theme(legend.position="none")
+
+allDataFit1Plot
+```
+
+```{r}
+ggsave("../figures/20250313_RecentAbsoluteLST.png", plot = allDataFit1Plot, width = 8, height =6, units = c("in"), dpi=600, bg = "white" )
+```
+
+
+```{r}
+ggplot(data = dfemmfit1.1) + 
+  geom_point(aes(x=bTSF, y=mean, color = bTSF)) +
+  geom_errorbar(aes(x=bTSF, ymin = LCL, ymax = UCL, color = bTSF)) +
+  coord_flip() +
+  scale_color_manual(name= "Time Since Fire", values=c('#DB4743FF','#F5AF4DFF',  '#DB4743FF','#F5AF4DFF', '#DB4743FF','#F5AF4DFF'), labels=c("one year", "2-5 years")) +
+  labs(x="", y="Land surface temperature (Kelvin)") +
+  scale_x_discrete(labels= c("One", "One", "Two", "Two", "Three", "Three")) +
+    theme_bw() +
+  annotate("text", x = 2, y = 288.3, label = "*", color='#DB4743FF',  size = 10) +
+  annotate("text", x = 4, y = 288.9, label = "*", color='#DB4743FF',  size = 10) +
+  annotate("text", x = 6, y = 289.2, label = "*", color='#DB4743FF',  size = 10)
+  #theme(legend.position="none")
+
+```
+
+
+```{r}
+(recentLSTPlot = ggplot(data = dfemmfit1.1) + 
+  geom_point(aes(x=bTSF, y=mean, color = bTSF)) +
+  geom_errorbar(aes(x=bTSF, ymin = LCL, ymax = UCL, color = bTSF)) +
+  coord_flip() +
+  scale_color_manual(name= "Time Since Fire", values=c('#d95f02','#7570b3',  '#d95f02','#7570b3', '#d95f02',  '#7570b3'), labels=c( "One year", "2-5 years")) +
+  labs(x="Times burned", y="Land surface Temperature (Kelvin)") +
+  scale_x_discrete(labels= c( "One", "One", "Two", "Two", "Three", "Three")) +
+    theme_bw() +
+   theme( legend.position="right", 
+        legend.text=element_text(size=14), 
+        legend.title=element_text(size=16),
+        legend.key = element_blank()) +
+    theme(axis.title.y = element_text(size = 16, hjust = 0.5, vjust = 1.1),
+          axis.title.x = element_text(size = 16, hjust = 0.5, vjust = 1.1),
+        axis.text.x = element_text(size = 14, color = "black"),
+        axis.text.y = element_text(size = 14, color = "black")) 
+)
+```
+
+```{r}
+ggsave("../figures/20250313_AbsoluteRecentLstPptSlide.png", plot = recentLSTPlot, width = 8, height =6, units = c("in"), dpi=600, bg = "white" )
+```
+
+## Model Fit 2: Absolute All time steps since fire
+
+```{r}
+fit2 = glm(lstMean ~ bTsfAlt, data = final_df, family = gaussian)
+```
+
+
+### Residuals: 
+
+```{r}
+summary(fit2)
+
+final_df$fit2.res = resid(fit2, type = "pearson")
+final_df$fit2.fit = fitted(fit2)
+
+sum(residuals(fit2, type="pearson")^2)/fit2$df.res
+
+qplot(fitted(fit2), resid(fit2)) + theme_bw()
+
+```
+
+### Calculate marginal means for difference test
+
+```{r}
+emmfit2 = emmeans(fit2, specs = ~ bTsfAlt)
+emmfit2
+
+dfemmfit2 = as.data.frame(emmfit2)
+
+dfemmfit2.1 = dfemmfit2 %>% mutate(mean=(emmean),
+                  SE=(SE),
+                  LCL=(lower.CL),
+                  UCL=(upper.CL),
+                  bTSF = factor(bTsfAlt, levels = c("One_1", "One_2-5", "One_6-15", "One_16+", "Two_1", "Two_2-5", "Two_6-15", "Two_16+", "Three_1", "Three_2-5", "Three_6-15", "Three_16+"))
+)
+dfemmfit2.1
+```
+
+```{r}
+One_1 =  c(1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0)
+One_2_5 = c(0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0)
+One_6_15 =c(0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0)
+One_16_36 =c(0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0)
+
+Two_1 =  c(0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0)
+Two_2_5 = c(0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0)
+Two_6_15 =c(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0)
+Two_16_36 = c(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1)
+
+Three_1 = c(0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0)
+Three_2_5 = c(0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0)
+Three_6_15 =  c(0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0) 
+Three_16_36 = c(0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0)
+```
+
+```{r}
+contrast(emmfit2, method = list("One_1 - Two_1" = One_1 - Two_1,
+                             "One_1 - Three_1" = One_1 - Three_1,
+                             "One_2_5 - Two_2_5" = One_2_5 - Two_2_5,
+                             "One_2_5 - Three_2_5" = One_2_5 - Three_2_5,
+                             "One_6_15 - Two_6_15" = One_6_15 - Two_6_15,
+                             "One_6_15 - Three_6_15" = One_6_15 - Three_6_15,
+                             "One_16_36 - Two_16_36" = One_16_36 - Two_16_36,
+                             "One__16_36 - Three_16_36" = One_16_36 - Three_16_36))
+
+contrast(emmfit2, method = list("One_1 - Two_1" = One_1 - Two_1,
+                             "One_1 - Three_1" = One_1 - Three_1,
+                             "One_2_5 - Two_2_5" = One_2_5 - Two_2_5,
+                             "One_2_5 - Three_2_5" = One_2_5 - Three_2_5,
+                             "One_6_15 - Two_6_15" = One_6_15 - Two_6_15,
+                             "One_6_15 - Three_6_15" = One_6_15 - Three_6_15,
+                             "One_16_36 - Two_16_36" = One_16_36 - Two_16_36,
+                             "One__16_36 - Three_16_36" = One_16_36 - Three_16_36),
+         adjust = "mvt") %>%
+     confint()
+
+
+```
+
+
+
+### Plots
+
+
+
+```{r}
+( modelfit2_Plot = ggplot(data = dfemmfit2.1 ) + 
+  geom_point(aes(x=bTsfAlt, y=mean, color = bTsfAlt)) +
+  geom_errorbar(aes(x=bTsfAlt, ymin = LCL, ymax = UCL, color = bTsfAlt)) +
+  coord_flip() +
+  scale_color_manual(name= "Time Since Fire", values=c('#f79256','#fbd1a2',  '#7dcfb6','#00b2ca','#f79256','#fbd1a2',  '#7dcfb6','#00b2ca','#f79256','#fbd1a2',  '#7dcfb6','#00b2ca'), labels=c("1 year", "2-5 years", "6-15 years", "16+ years", "1 year", "2-5 years", "6-15 years", "16+ years", "1 year", "2-5 years", "6-15 years", "16+ years")) +
+  labs(x="", y="Land surface temperature (Kelvin)") +
+  scale_x_discrete(labels= c("One", "One", "One", "One", "Two", "Two", "Two", "Two", "Three", "Three","Three", "Three")) +
+    theme_bw() #+
+  #theme(legend.position="none")
+
+)
+
+
+```
+
+```{r}
+ggsave("../figures/20250313_AbsoluteLSTDifferenceBorealAltTsfBins.png", plot = modelfit2_Plot, width = 8, height =6, units = c("in"), dpi=600, bg = "white" )
+```
+
+
+
+# Relative (post-pre) Models
+## Model Recent time since fire effects
+ Match AGU and ABOVE Analaysis format
+```{r}
+model1 = glm(post_pre_Lst ~ bTSF, data = recent_2014_2022, family = gaussian)
+```
+
+### Residuals: 
+
+```{r}
+recent_2014_2022$model1.res = resid(model1, type = "pearson")
+recent_2014_2022$model1.fit = fitted(model1)
 
 sum(residuals(model1, type="pearson")^2)/model1$df.res
 
 qplot(fitted(model1), resid(model1)) + theme_bw()
 
 ```
+
+### Calculate marginal means for difference
 
 ```{r}
 emm_model1 = emmeans(model1, specs = ~ bTSF)
@@ -445,62 +442,6 @@ df_emm_model1 = df_emm_model1 %>% mutate(mean=(emmean),
                   )
 
 df_emm_model1
-```
-
-## Plots
-```{r}
-recent_model1_plot = ggplot(data = df_emm_model1) + 
-  geom_point(aes(x=bTSF, y=mean, color = bTSF)) +
-  geom_errorbar(aes(x=bTSF, ymin = LCL, ymax = UCL, color = bTSF)) +
-  coord_flip() +
-  scale_color_manual(name= "Time Since Fire", values=c('#DB4743FF','#F5AF4DFF',  '#DB4743FF','#F5AF4DFF', '#DB4743FF','#F5AF4DFF'), labels=c("one year", "2-5 years", "one year", "2-5 years", "one year", "2-5 years")) +
-  labs(x="", y="Land surface temperature differnece (Kelvin)", subtitle = "difference Lst = pre LST - post LST") +
-  scale_x_discrete(labels= c("One", "One", "Two", "Two", "Three", "Three")) +
-    theme_bw() #+
-  #theme(legend.position="none")
-
-recent_model1_plot
-```
-
-```{r}
-ggsave("../figures/20250306_LSTDifferenceRecentBoreal.png", plot = recent_model1_plot, width = 8, height =6, units = c("in"), dpi=600, bg = "white" )
-```
-
-
-
-```{r}
-(recent_model1_plot2 = ggplot(data = df_emm_model1) + 
-  geom_point(aes(x=bTSF, y=mean, color = bTSF)) +
-  geom_errorbar(aes(x=bTSF, ymin = LCL, ymax = UCL, color = bTSF)) +
-  coord_flip() +
-  scale_color_manual(name= "Time Since Fire", values=c('#d95f02','#7570b3',  '#d95f02','#7570b3', '#d95f02',  '#7570b3'), labels=c("One year", "2-5 years")) +
-  labs(x="Times burned", y="Land surface Temperature Difference (Kelvin)", subtitle = "Difference = pre LST - post LST") +
-  scale_x_discrete(labels= c("One", "One", "Two", "Two", "Three", "Three")) +
-    theme_bw() +
-   theme( legend.position="right", 
-        legend.text=element_text(size=14), 
-        legend.title=element_text(size=16),
-        legend.key = element_blank()) +
-    theme(axis.title.y = element_text(size = 16, hjust = 0.5, vjust = 1.1),
-          axis.title.x = element_text(size = 16, hjust = 0.5, vjust = 1.1),
-        axis.text.x = element_text(size = 14, color = "black"),
-        axis.text.y = element_text(size = 14, color = "black")) 
-)
-```
-
-```{r}
-ggsave("../figures/20250312_LSTDifferencerecentRecentBorealPPTSlide.png", plot = recent_model1_plot2, width = 8, height =6, units = c("in"), dpi=600, bg = "white" )
-```
-
-
-
-
-
-
-## Testing difference in means
-
-```{r}
-emm_model1
 ```
 
 ```{r}
@@ -522,206 +463,57 @@ contrast(emm_model1, method = list("One_1 - Two_1" = One_1 - Two_1,
                              "One_2_5 - Three_2_5" = One_2_5 - Three_2_5) ,
          adjust = "mvt") %>%
      confint()
-
-
 ```
 
 
-
-# Model OLD time since fire effects
+### Plots
 
 ```{r}
-unique(old$TimeSinceFiretsf)
-```
-
-```{r}
-model2 = glm(diffLst ~ bTSF, data = old_2014_2022, family = gaussian)
-```
-
-```{r}
-summary(model2)
-```
-
-### Residuals: 
-
-```{r eval=FALSE, include=FALSE}
-recent$model2.res = resid(model2, type = "pearson")
-recent$model2.fit = fitted(model2)
-
-sum(residuals(model2, type="pearson")^2)/model2$df.res
-
-qplot(fitted(model2), resid(model2)) + theme_bw()
-
-```
-
-
-```{r}
-emm_model2 = emmeans(model2, specs = ~ bTSF)
-emm_model2
-
-df_emm_model2 = as.data.frame(emm_model2)
-
-df_emm_model2 = df_emm_model2 %>% mutate(mean=(emmean),
-                  SE=(SE),
-                  LCL=(lower.CL),
-                  UCL=(upper.CL),
-                  bTSF = factor(bTSF, levels = c( "One_6-10", "One_11-20", "One_21-30", "One_31-36",  "Two_6-10",  "Two_11-20","Two_21-30", "Two_31-36",  "Three_6-10", "Three_11-20", "Three_21-30"))
-                  )
-
-df_emm_model2
-```
-
-## Plots
-
-```{r}
-model2_old_Plot = ggplot(data = df_emm_model2 ) + 
+(recent_model1_plot1 = ggplot(data = df_emm_model1) + 
   geom_point(aes(x=bTSF, y=mean, color = bTSF)) +
   geom_errorbar(aes(x=bTSF, ymin = LCL, ymax = UCL, color = bTSF)) +
   coord_flip() +
-  scale_color_manual(name= "Time Since Fire", values=c('#02c39a','#00a896',  '#028090','#05668d', '#02c39a','#00a896',  '#028090','#05668d', '#02c39a','#00a896',  '#028090'), labels=c("6-10 year", "11-20 years", "21-30 year", "30-36 years","6-10 year", "11-20 years", "21-30 year", "30-36 years", "6-10 year", "11-20 years", "21-30 year")) +
-  labs(x="", y="Land surface temperature differnece (Kelvin)", subtitle = "difference Lst = pre LST - post LST") +
-  scale_x_discrete(labels= c("One", "One", "One", "One", "Two", "Two", "Two", "Two", "Three", "Three", "Three")) +
-    theme_bw() #+
-  #theme(legend.position="none")
-
-model2_old_Plot
-```
-
-```{r}
-ggsave("../figures/20250306_LSTDifferenceOLDBoreal.png", plot = model2_old_Plot, width = 8, height =6, units = c("in"), dpi=600, bg = "white" )
-```
-
-
-
-# Model 3 with Standard Time Since Fire groups
-
-```{r}
-model3 = glm(diffLst ~ bTsfStd, data = data2014_2022, family = gaussian)
-```
-
-```{r}
-summary(model3)
-```
-
-### Residuals: 
-
-```{r eval=FALSE, include=FALSE}
-recent$model3.res = resid(model3, type = "pearson")
-recent$model3.fit = fitted(model3)
-
-sum(residuals(model3, type="pearson")^2)/model3$df.res
-
-qplot(fitted(model3), resid(model3)) + theme_bw()
-
-```
-
-
-```{r}
-emm_model3 = emmeans(model3, specs = ~ bTsfStd)
-emm_model3
-
-df_emm_model3 = as.data.frame(emm_model3)
-
-df_emm_model3 = df_emm_model3 %>% mutate(mean=(emmean),
-                  SE=(SE),
-                  LCL=(lower.CL),
-                  UCL=(upper.CL),
-                  bTsfStd = factor(bTsfStd, levels = c("One_1-5", "One_6-10", "One_11-20", "One_21+", "Two_1-5", "Two_6-10", "Two_11-20", "Two_21+", "Three_1-5", "Three_6-10", "Three_11-20", "Three_21+"))
-                  )
-
-df_emm_model3
-```
-
-## Plots
-
-```{r}
-( Model3_Plot = ggplot(data = df_emm_model3 ) + 
-  geom_point(aes(x=bTsfStd, y=mean, color = bTsfStd)) +
-  geom_errorbar(aes(x=bTsfStd, ymin = LCL, ymax = UCL, color = bTsfStd)) +
-  coord_flip() +
-  scale_color_manual(name= "Time Since Fire", values=c('#f79256','#fbd1a2',  '#7dcfb6','#00b2ca','#f79256','#fbd1a2',  '#7dcfb6','#00b2ca','#f79256','#fbd1a2',  '#7dcfb6','#00b2ca'), labels=c("1-5 years", "6-10 years", "11-20 years", "21+ years","1-5 years", "6-10 years", "11-20 years", "21+ years", "1-5 years", "6-10 years", "11-20 years", "21+ years")) +
-  labs(x="", y="Land surface temperature differnece (Kelvin)", subtitle = "difference Lst = pre LST - post LST") +
-  scale_x_discrete(labels= c("One", "One", "One", "One", "Two", "Two", "Two", "Two", "Three", "Three","Three", "Three")) +
-    theme_bw() #+
-  #theme(legend.position="none")
-
+  scale_color_manual(name= "Time Since Fire", values=c('#d95f02','#7570b3',  '#d95f02','#7570b3', '#d95f02',  '#7570b3'), labels=c("One year", "2-5 years")) +
+  labs(x="Times burned", y="Land surface Temperature Difference (Kelvin)", subtitle = "Difference = post LST - pre LST") +
+  scale_x_discrete(labels= c("One", "One", "Two", "Two", "Three", "Three")) +
+    theme_bw() +
+   theme( legend.position="right", 
+        legend.text=element_text(size=14), 
+        legend.title=element_text(size=16),
+        legend.key = element_blank()) +
+    theme(axis.title.y = element_text(size = 16, hjust = 0.5, vjust = 1.1),
+          axis.title.x = element_text(size = 16, hjust = 0.5, vjust = 1.1),
+        axis.text.x = element_text(size = 14, color = "black"),
+        axis.text.y = element_text(size = 14, color = "black")) 
 )
-
-
 ```
 
 ```{r}
-ggsave("../figures/20250306_LSTDifferenceBorealStdTsfBins.png", plot = Model3_Plot, width = 8, height =6, units = c("in"), dpi=600, bg = "white" )
+ggsave("../figures/20250313_LSTDifferencerecentRecentBorealPPTSlide.png", plot = recent_model1_plot1, width = 8, height =6, units = c("in"), dpi=600, bg = "white" )
 ```
 
 
-## Testing difference in means
+## Model 4 with Alternate Time Since Fire groups
+Full time for space substitution.
 
 ```{r}
-emm_model3
-```
-
-```{r}
-One_1_5 =  c(1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0)
-One_6_10 = c(0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0)
-One_11_20 =c(0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0)
-One_21_36 =c(0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0)
-Two_1_5 =  c(0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0)
-Two_6_10 = c(0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0)
-Two_11_20 =c(0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0)
-Two_21_36 =c(0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0)
-Three_1_5 =c(0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0)
-Three_6_10 =c(0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0)
-Three_11_20 =  c(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0)
-Three_21_36 = c(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1)
-```
-
-
-
-
-**RECALCULATE**
-```{r}
-contrast(emm_model3, method = list("One_1 - Two_1" = One_1 - Two_1,
-                             "One_1 - Three_1" = One_1 - Three_1,
-                             "One_2_5 - Two_2_5" = One_2_5 - Two_2_5,
-                             "One_2_5 - Three_2_5" = One_2_5 - Three_2_5))
-```
-```{r}
-compTB = contrast(emm_model3, method = list("One_1 - Two_1" = One_1 - Two_1,
-                             "One_1 - Three_1" = One_1 - Three_1,
-                             "One_2_5 - Two_2_5" = One_2_5 - Two_2_5,
-                             "One_2_5 - Three_2_5" = One_2_5 - Three_2_5) ,
-         adjust = "mvt") %>%
-     confint()
-
-compTB
-```
-
-
-
-
-# Model 4 with Alternate Time Since Fire groups
-
-```{r}
-model4 = glm(diffLst ~ bTsfAlt, data = final_df, family = gaussian)
-```
-
-```{r}
-summary(model4)
+model4 = glm(post_pre_Lst ~ bTsfAlt, data = final_df, family = gaussian)
 ```
 
 ### Residuals: 
 
-```{r eval=FALSE, include=FALSE}
-recent$model4.res = resid(model4, type = "pearson")
-recent$model4.fit = fitted(model4)
+```{r}
+final_df$model4.res = resid(model4, type = "pearson")
+final_df$model4.fit = fitted(model4)
 
 sum(residuals(model4, type="pearson")^2)/model4$df.res
 
 qplot(fitted(model4), resid(model4)) + theme_bw()
 
+summary(model4)
 ```
 
+### Calculate marginal means for difference test
 
 ```{r}
 emm_model4 = emmeans(model4, specs = ~ bTsfAlt)
@@ -739,7 +531,48 @@ df_emm_model4 = df_emm_model4 %>% mutate(mean=(emmean),
 df_emm_model4
 ```
 
-## Plots
+```{r}
+One_1 =  c(1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0)
+One_2_5 = c(0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0)
+One_6_15 =c(0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0)
+One_16_36 =c(0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0)
+
+Two_1 =  c(0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0)
+Two_2_5 = c(0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0)
+Two_6_15 =c(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0)
+Two_16_36 = c(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1)
+
+Three_1 = c(0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0)
+Three_2_5 = c(0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0)
+Three_6_15 =  c(0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0) 
+Three_16_36 = c(0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0)
+```
+
+```{r}
+contrast(emm_model4, method = list("One_1 - Two_1" = One_1 - Two_1,
+                             "One_1 - Three_1" = One_1 - Three_1,
+                             "One_2_5 - Two_2_5" = One_2_5 - Two_2_5,
+                             "One_2_5 - Three_2_5" = One_2_5 - Three_2_5,
+                             "One_6_15 - Two_6_15" = One_6_15 - Two_6_15,
+                             "One_6_15 - Three_6_15" = One_6_15 - Three_6_15,
+                             "One_16_36 - Two_16_36" = One_16_36 - Two_16_36,
+                             "One__16_36 - Three_16_36" = One_16_36 - Three_16_36))
+
+compTB = contrast(emm_model4, method = list("One_1 - Two_1" = One_1 - Two_1,
+                             "One_1 - Three_1" = One_1 - Three_1,
+                             "One_2_5 - Two_2_5" = One_2_5 - Two_2_5,
+                             "One_2_5 - Three_2_5" = One_2_5 - Three_2_5,
+                             "One_6_15 - Two_6_15" = One_6_15 - Two_6_15,
+                             "One_6_15 - Three_6_15" = One_6_15 - Three_6_15,
+                             "One_16_36 - Two_16_36" = One_16_36 - Two_16_36,
+                             "One__16_36 - Three_16_36" = One_16_36 - Three_16_36),
+         adjust = "mvt") %>%
+     confint()
+
+compTB
+```
+
+### Plots
 
 ```{r}
 ( model4_Plot = ggplot(data = df_emm_model4 ) + 
@@ -747,7 +580,7 @@ df_emm_model4
   geom_errorbar(aes(x=bTsfAlt, ymin = LCL, ymax = UCL, color = bTsfAlt)) +
   coord_flip() +
   scale_color_manual(name= "Time Since Fire", values=c('#f79256','#fbd1a2',  '#7dcfb6','#00b2ca','#f79256','#fbd1a2',  '#7dcfb6','#00b2ca','#f79256','#fbd1a2',  '#7dcfb6','#00b2ca'), labels=c("1 year", "2-5 years", "6-15 years", "16+ years", "1 year", "2-5 years", "6-15 years", "16+ years", "1 year", "2-5 years", "6-15 years", "16+ years")) +
-  labs(x="", y="Land surface temperature differnece (Kelvin)", subtitle = "difference Lst = pre LST - post LST") +
+  labs(x="", y="Land surface temperature differnece (Kelvin)", subtitle = "difference Lst = post LST -pre LST") +
   scale_x_discrete(labels= c("One", "One", "One", "One", "Two", "Two", "Two", "Two", "Three", "Three","Three", "Three")) +
     theme_bw() #+
   #theme(legend.position="none")
@@ -758,54 +591,7 @@ df_emm_model4
 ```
 
 ```{r}
-ggsave("../figures/20250312_LSTDifferenceBorealAltTsfBins.png", plot = model4_Plot, width = 8, height =6, units = c("in"), dpi=600, bg = "white" )
-```
-
-
-## Testing difference in means
-
-```{r}
-emm_model4
-```
-
-```{r}
-One_1 =  c(1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0)
-One_2_5 = c(0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0)
-One_6_15 =c(0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0)
-One_16_36 =c(0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0)
-Two_1 =  c(0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0)
-Two_2_5 = c(0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0)
-Two_6_15 =c(0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0)
-Two_16_36 =c(0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0)
-Three_1 =c(0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0)
-Three_2_5 =c(0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0)
-Three_6_15 =  c(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0)
-Three_16_36 = c(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1)
-```
-
-
-
-
-**RECALCULATE**
-```{r}
-contrast(emm_model4, method = list("One_1 - Two_1" = One_1 - Two_1,
-                             "One_1 - Three_1" = One_1 - Three_1,
-                             "One_2_5 - Two_2_5" = One_2_5 - Two_2_5,
-                             "One_2_5 - Three_2_5" = One_2_5 - Three_2_5,
-                             "One_6_15 - Two_6_15" = One_6_15 - Two_6_15,
-                             "One_6_15 - Three_6_15" = One_6_15 - Three_6_15,
-                             "One_16_36 - Two_16_36" = One_16_36 - Two_16_36,
-                             "One__16_36 - Three_16_36" = One_16_36 - Three_16_36))
-```
-```{r}
-compTB = contrast(emm_model4, method = list("One_1 - Two_1" = One_1 - Two_1,
-                             "One_1 - Three_1" = One_1 - Three_1,
-                             "One_2_5 - Two_2_5" = One_2_5 - Two_2_5,
-                             "One_2_5 - Three_2_5" = One_2_5 - Three_2_5) ,
-         adjust = "mvt") %>%
-     confint()
-
-compTB
+ggsave("../figures/20250313_RelativeLSTDifferenceBorealAltTsfBins.png", plot = model4_Plot, width = 8, height =6, units = c("in"), dpi=600, bg = "white" )
 ```
 
 

@@ -368,11 +368,38 @@ names(unburnedCA)
 
 ```{r}
 ( akCancombined = bind_rows(dfcombineAK, dfcombineCA) %>%
-    distinct(ID, .keep_all = TRUE)
+    distinct(ID, .keep_all = TRUE) %>%
+    mutate(row_id = row_number())
 )
 ```
 
+
 # Write to csv
+
 ```{r}
 write.csv( akCancombined, '../outputs/cleanedSamplePoints/LstBoreal2013-2022.csv', row.names=F)
+```
+
+## points for multi index
+
+```{r}
+( forEEmultiIndex = akCancombined %>%
+  dplyr::select(ID, latitude, longitude, countYr, maxYr, row_id) 
+)
+```
+
+# Create Spatial points for EE
+
+```{r}
+df_to_sf <- function(x){
+  st_as_sf(x, coords = c("longitude","latitude"), crs = 4326, remove = FALSE)
+}
+```
+
+```{r}
+( multiindex_pts = forEEmultiIndex %>% df_to_sf() )
+```
+
+```{r eval=FALSE, include=FALSE}
+st_write(multiindex_pts, "../outputs/spatialDataCreate/shapefiles/multiIndexPts_lst_20250331.shp", driver="ESRI Shapefile")
 ```

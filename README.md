@@ -41,3 +41,10 @@ Alternative Groupings (Used in Some Studies):
 1. `OrganizeFirePerimetersByYear.Rmd` Take MTBS and NBAC and save by fire year for AK and Canada.
 
 
+
+# Analysis
+
+## Decision Tree Classification
+
+Multiply spectral indices were extract for for field sites, [see code]()
+Multiple spectral indices were extracted for sampled points, [see code](https://code.earthengine.google.com/4277bc3be78bffa5a0d41a8a7b0a7d59). This is then used with the field model to predict burned/unburned

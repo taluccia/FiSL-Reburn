@@ -25,6 +25,9 @@ library(partykit)
 library(ggparty)
 library(e1071)
 library(MASS)
+library(randomForest)
+library(caret)
+library(pROC)
 ```
 
 # Data
@@ -43,9 +46,12 @@ unburnData = unburnList %>%
                 mutate(filename = tools::file_path_sans_ext(basename(.x)))) %>%
                 separate(filename, into = c("file", "dataYear"), sep = "_", convert = TRUE, extra = "merge")
 ```
+```{r}
+unburnData
+```
 
 ```{r}
-csvList = list.files("../data/fieldMultiIndex", pattern=".csv$", full.names=TRUE)
+csvList = list.files("../data/multiIndexFieldBurned", pattern=".csv$", full.names=TRUE)
 ```
 
 ```{r}
@@ -80,15 +86,21 @@ combineData
   mutate(match =  (dataYear %in% preYear)) %>%
   filter(match) %>% # Keep only rows where any match occurs
   mutate(match_type = case_when(
-    dataYear %in% preYear ~ "pre")) 
+    dataYear %in% preYear ~ "pre")) %>%
+    mutate(tx = "unburned")
 )
 ```
 
+# second burn years to get unburned multi index at same sites
 
 ```{r}
 sort(unique(lcc$second_burn))
 
-lcc %>% filter(second_burn %in% c("2004", "2005", "2007", "2011", "2018"))
+(secondBurnYears = lcc %>% filter(second_burn %in% c("2004", "2005", "2007", "2011", "2018")) )
+```
+
+```{r}
+sort(unique(secondBurnYears$recent_burn))
 ```
 
 ```{r}
@@ -117,9 +129,9 @@ lcc %>% filter(second_burn %in% c("2004", "2005", "2007", "2011", "2018"))
 ( unburnedData = df_unburned %>% 
     left_join(., lcc_unburn, by=c("row_id")) %>%
     filter(second_burn != 2018) %>%
-    dplyr::select(num_burns, ba:vi6t) %>%
+    dplyr::select(num_burns, tx, ba:vi6t) %>%
     mutate(timesBurned = "control") %>%
-    dplyr::select(timesBurned, ba:vi6t)
+    dplyr::select(timesBurned,tx,  ba:vi6t)
 )
 ```
 
@@ -162,7 +174,8 @@ unique(df_svm$num_burns)
     . == 2  ~ "two",
     . == 3 ~ "three",
     TRUE ~ "other"), .names ="timesBurned")) %>%
-    dplyr::select(timesBurned, ba:vi6t) %>%
+    dplyr::select(timesBurned, ba:vi6t) %>% 
+    mutate(tx = "burned") %>%
     bind_rows(., unburnedData)
 )
 ```
@@ -173,11 +186,11 @@ unique(df_MCA$timesBurned)
 # FAMD
  Factor Analysis of Mixed Data
 
-```{r}
+```{r eval=FALSE, include=FALSE}
 famd_result <- FAMD(df_MCA, graph = FALSE)
 ```
 
-```{r}
+```{r eval=FALSE, include=FALSE}
 # Scree plot
 fviz_eig(famd_result)
 
@@ -189,7 +202,7 @@ fviz_famd_ind(famd_result, repel = TRUE)
 
 ```
 
-```{r}
+```{r eval=FALSE, include=FALSE}
 
 fviz_famd_ind(famd_result, 
               habillage = "timesBurned", # Color by category
@@ -199,7 +212,7 @@ fviz_famd_ind(famd_result,
 ```
 
 
-```{r}
+```{r eval=FALSE, include=FALSE}
 # quantify separation with clustering
 
 set.seed(17) # For reproducibility
@@ -212,7 +225,7 @@ fviz_cluster(clust, data = famd_result$ind$coord, geom = "point")
 
 # LDA
 
-```{r}
+```{r eval=FALSE, include=FALSE}
 # Convert the FAMD coordinates to a data frame
 famd_df <- as.data.frame(famd_result$ind$coord)
 
@@ -221,7 +234,7 @@ famd_df$timesBurned <- df_MCA$timesBurned  # Replace with actual variable source
 
 ```
 
-```{r}
+```{r eval=FALSE, include=FALSE}
 
 lda_model <- lda(timesBurned ~ Dim.1 + Dim.2, data = famd_df)
 plot(lda_model)
@@ -233,32 +246,33 @@ plot(lda_model)
 
 ## Performed on PCA
 
-```{r}
+
+```{r eval=FALSE, include=FALSE}
 tree_model <- rpart(timesBurned ~ ., data = famd_df, method = "class")
 
 ```
 
-```{r}
+```{r eval=FALSE, include=FALSE}
 
 # Plot the tree
 rpart.plot(tree_model, type = 3, extra = 101, fallen.leaves = TRUE)
 
 ```
 
-```{r}
+```{r eval=FALSE, include=FALSE}
 
 fancyRpartPlot(tree_model)
 
 ```
 
-```{r}
+```{r eval=FALSE, include=FALSE}
 
 # Convert rpart object to a party object
 party_tree <- as.party(tree_model)
 
 ```
 
-```{r}
+```{r eval=FALSE, include=FALSE}
 
 
 ggparty(party_tree) +
@@ -268,49 +282,154 @@ ggparty(party_tree) +
 ```
 
 
-## Performed on Dataframe
+## Random Forest on Dataframe
 
 ```{r}
+( df_rf = df_MCA %>%
+  dplyr::select(tx, ba:vi6t) )
+unique(df_rf$tx)
+```
 
-model_class <- rpart(timesBurned ~ ., data = df_MCA, method = "class")
+### RF on times burned class
+
+```{r}
+model1_class <- rpart(timesBurned ~ ., data = df_MCA, method = "class")
 ```
 
 ```{r}
-
 # Plot the tree
-rpart.plot(model_class, type = 3, extra = 101, fallen.leaves = TRUE)
-
+rpart.plot(model1_class, type = 3, extra = 101, fallen.leaves = TRUE)
 ```
 
 ```{r}
-
+summary(model1_class)
+```
+```{r}
+fancyRpartPlot(model1_class)
 ```
 
 ```{r}
-summary(model_class)
-
-```
-```{r}
-
-fancyRpartPlot(model_class)
-
-```
-
-```{r}
-
-
 # Convert rpart object to a party object
-party_class <- as.party(model_class)
-
+party_class1 <- as.party(model1_class)
 ```
 
 ```{r}
-
-
-ggparty(party_class) +
+ggparty(party_class1) +
   geom_edge() +
   geom_node_label(aes(label = splitvar), ids = "inner") +
   geom_node_label(aes(label = info), ids = "terminal", size = 3)
+```
+
+### RF binary class burned/unburned
+
+```{r}
+model2_class <- rpart(tx ~ ., data = df_rf, method = "class")
+```
+
+```{r}
+# Plot the tree
+rpart.plot(model2_class, type = 3, extra = 101, fallen.leaves = TRUE)
+```
+
+```{r}
+summary(model2_class)
+```
+```{r}
+fancyRpartPlot(model2_class)
+```
+
+```{r}
+# Convert rpart object to a party object
+party_class2 <- as.party(model2_class)
+```
+
+```{r}
+ggparty(party_class2) +
+  geom_edge() +
+  geom_node_label(aes(label = splitvar), ids = "inner") +
+  geom_node_label(aes(label = info), ids = "terminal", size = 3)
+```
+
+### Random Forest with performance
+
+```{r}
+
+
+# Example dataset
+set.seed(17)
+
+
+# Split data into train and test sets
+train_idx <- sample(1:nrow(df_rf), 0.7 * nrow(df_rf))
+train_data <- df_rf[train_idx, ]
+test_data <- df_rf[-train_idx, ]
+
+train_data$tx <- as.factor(train_data$tx) 
+test_data$tx <- as.factor(test_data$tx) 
+# Train Random Forest model
+rf_model <- randomForest(tx ~ ., data = train_data, ntree = 500, mtry = 2)
+
+```
+
+```{r}
+predictions <- predict(rf_model, test_data)
+
+```
+
+```{r}
+# Confusion Matrix
+conf_matrix <- confusionMatrix(predictions, test_data$tx)
+print(conf_matrix)
+```
+
+```{r}
+str(conf_matrix$byClass)
+```
+
+```{r}
+# Assume you split your data into train and test sets
+actual_labels <- test_data$tx  # Replace with your actual column name
+
+conf_matrix <- confusionMatrix(predictions, actual_labels)
+precision <- conf_matrix$byClass["Precision"]
+recall <- conf_matrix$byClass["Recall"]
+f1_score <- conf_matrix$byClass["F1"]
+
+
+```
+
+```{r}
+precision
+recall
+f1_score
+```
+
+```{r}
+
+
+# Convert categorical to binary (Example: Setosa vs. Others)
+
+rf_probs <- predict(rf_model, test_data, type = "prob")[,1]
+
+# Compute ROC
+roc_curve <- roc(test_data$tx, rf_probs)
+auc(roc_curve)
+
+# Plot ROC
+plot(roc_curve, col = "blue", lwd = 2, main = "ROC Curve")
+
+```
+
+
+```{r}
+importance(rf_model)
+varImpPlot(rf_model)
+
+```
+
+```{r}
+rf_model$err.rate[nrow(rf_model$err.rate), ]  # OOB Error for final tree
+
 ```
 
 # SVM Analysis
