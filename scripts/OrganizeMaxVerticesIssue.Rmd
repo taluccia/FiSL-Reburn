@@ -1,0 +1,128 @@
+---
+title: "Organize Fire perimeters with too many vertices"
+author: "Anna Talucci"
+date: "2025-02-27"
+output: html_document
+---
+
+# Overview 
+
+In Earth engine the following fire years will not upload because there is a feature that has too many vertices
+
+1995 feature '77' has 1150448 vertices
+2016 feature '93' has 1345805 vertices, 
+2019 feature '32' has 1106788 vertices,
+
+
+# Packages
+```{r}
+library(sf)
+library(lwgeom)
+```
+
+# Data
+```{r}
+can1995 = st_read("../outputs/firesByYearCAN/can1995.shp", "can1995")
+```
+```{r}
+can2016 = st_read("../outputs/firesByYearCAN/can2016.shp", "can2016")
+```
+
+```{r}
+can2019 = st_read("../outputs/firesByYearCAN/can2019.shp", "can2019")
+```
+
+```{r}
+can1995
+```
+
+
+
+```{r}
+can1995_cast <- st_cast(can1995, "POLYGON")
+```
+```{r}
+can2016_cast <- st_cast(can2016, "POLYGON")
+```
+
+```{r}
+can2019_cast <- st_cast(can2019, "POLYGON")
+```
+ feature '2118' has 1087929 vertices
+```{r}
+( f2118 = can2019_cast %>% slice(2118) )
+( f2118_nfireid = can2019_cast %>% filter(NFIREID==274) )
+```
+```{r}
+( f274 = can2019 %>% filter(NFIREID==274) )
+```
+```{r}
+plot(st_geometry(f2118))
+plot(st_geometry(f274))
+
+```
+
+# Get polygon centroid and bounding box
+```{r}
+library(sf)
+library(lwgeom)
+
+centroid <- st_coordinates(st_centroid(f2118))
+bbox <- st_bbox(f2118)
+
+```
+
+# Create a vertical line through the centroid to split the polygon
+```{r}
+split_line <- st_sfc(st_linestring(matrix(c(bbox["xmin"], centroid[2],  # Start point (left)
+                                            bbox["xmax"], centroid[2]), # End point (right)
+                                          ncol=2, byrow=TRUE)), 
+                     crs = st_crs(f2118))
+```
+
+# Convert line to sf object
+```{r}
+# Convert to simple feature geometry (sfg) and then to sfc
+split_line_sfc <- st_sfc(split_line, crs = st_crs(polygon))
+
+# Split the polygon using st_split() (NOTE: lwgeom must be installed)
+split_result <- st_split(polygon, split_line_sfc)
+
+# Extract polygons from the result
+split_polygons <- st_collection_extract(split_result, "POLYGON")
+```
+
+
+
+# Plot result
+```{r}
+plot(st_geometry(f2118), col = 'lightblue', border = 'black')
+plot(st_geometry(split_line_sf), col = 'red', add = TRUE, lwd = 2)
+#plot(st_geometry(split_polygons), col = c('blue', 'green'), add = TRUE, border = 'black')
+```
+
+
+
+```{r}
+can1995_cast
+```
+
+```{r}
+( Can2019_Not274 = can2019_cast %>% filter(NFIREID!=274) )
+```
+
+```{r}
+st_write(can1995_cast , "../outputs/firesByYearCAN/castAll_can1995.shp", driver = "ESRI Shapefile", append = FALSE)
+```
+
+```{r}
+st_write(can2016_cast , "../outputs/firesByYearCAN/castAll_can2016.shp", driver = "ESRI Shapefile", append = FALSE)
+```
+
+```{r}
+st_write(can2019_cast , "../outputs/firesByYearCAN/castAll_can2019.shp", driver = "ESRI Shapefile", append = FALSE)
+```
+
+```{r}
+st_write(Can2019_Not274 , "../outputs/firesByYearCAN/castAllNot274_can2019.shp", driver = "ESRI Shapefile", append = FALSE)
+```

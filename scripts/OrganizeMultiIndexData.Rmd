@@ -1,0 +1,190 @@
+---
+title: "Organize Multi Index Data"
+author: "Anna Talucci"
+date: "2025-03-31"
+output: html_document
+---
+
+# Packages
+
+```{r}
+library(tidyverse)
+
+```
+
+
+
+# Data
+
+```{r}
+lst = read_csv("../outputs/cleanedSamplePoints/LstBoreal2013-2022.csv")
+```
+
+```{r}
+csvList = list.files("../data/multiIndex/multiIndexSampled", pattern=".csv$", full.names=TRUE)
+```
+
+```{r}
+
+sampledData = csvList %>% 
+                map_df(~ read_csv(.x) %>% 
+                mutate(filename = tools::file_path_sans_ext(basename(.x)))) %>%
+                separate(filename, into = c("code", "file", "sample", "dataYear"), sep = "_", convert = TRUE, extra = "merge")
+```
+
+
+
+# View
+
+```{r}
+sampledData
+```
+
+```{r}
+names(sampledData)
+```
+
+
+# Organize
+
+```{r}
+( burnedData = sampledData %>% filter(maxYr !=-999999) )
+
+( unburnedData = sampledData %>% filter(maxYr ==-999999) )
+```
+## Unburned sampled
+
+```{r}
+unburnedData
+```
+
+```{r}
+set.seed(23)
+
+df_unburned <-  unburnedData %>%
+  filter(dataYear !=2023) %>%
+    dplyr::select(-`system:index`, -.geo) %>%
+    relocate(ID, row_id) %>%
+  group_by(ID, row_id) %>%
+  slice_sample(n=1) %>%  
+  ungroup() %>%
+  filter(blue!=-9999.0) %>%
+  filter(nbrt1!=-9999.0) %>%
+  slice_sample(prop = .05) %>%
+  mutate(tx="unburned") %>%
+    rename_with(~ paste0(.,"_post"), -row_id) %>%
+    mutate(preYear = dataYear_post - 1) 
+
+df_unburned
+
+```
+```{r}
+( unburned_delta_post = unburnedData %>%
+  filter(dataYear !=2023) %>%
+    dplyr::select(-`system:index`, -.geo) %>%
+    relocate(ID, row_id) %>%
+  rename(preYear = dataYear) %>%
+  rename_with(~ paste0(.,"_pre"), -row_id) %>%
+  rename(preYear = preYear_pre) %>%
+  full_join(., df_unburned, by= c("row_id", "preYear")) %>%
+  drop_na(tx_post) %>%
+  select(row_id:blue_pre, csi_pre:green_pre, mirbi_pre:nir_pre, red_pre:vi6t_pre, ba_post:blue_post, csi_post:green_post, mirbi_post:nir_post, red_post:vi6t_post) %>%
+  mutate(across(ends_with("_pre"), .names = "{col}_diff") - across(ends_with("_post"))) %>%
+ rename_with(~ sub("_\\d+", "", .), ends_with("_diff")) %>%
+  select(row_id, contains("_post"), contains("_diff")) %>%
+   rename_with(~ gsub("_post$", "", .x)) %>%
+   rename_with(~ gsub("_pre", "", .x)) %>%
+   mutate(tx = "unburned")
+)
+```
+rename(dataYear = dataYear_post, maxYr = maxYr_post, countYr = countYr_post) %>%
+  
+  mutate(across(ends_with("_pre"), .names = "{col}_diff") - across(ends_with("_post"))) %>%
+ rename_with(~ sub("_\\d+", "", .), ends_with("_diff")) %>%
+  select(row_id, contains("_post"), contains("_diff")) %>%
+   rename_with(~ gsub("_post$", "", .x))
+## Burned postfire
+
+```{r}
+( df_burned = burnedData %>% 
+    mutate(postYear = maxYr +1) %>%
+    dplyr::select(row_id, dataYear, maxYr, postYear, countYr, ba:blue, csi:green, mirbi:nir, red, savi:vi6t) %>%
+    rowwise() %>%
+  mutate(match =  (dataYear %in% postYear)) %>%
+  filter(match) %>% # Keep only rows where any match occurs
+  mutate(match_type = case_when(
+    dataYear %in% postYear ~ "post")) %>%
+    filter(blue!=-9999.0	) %>%
+    filter(nbrt1 !=-9999.0) %>%
+  mutate(tx="burned") %>%
+    rename_with(~ paste0(.,"_post"), -row_id)
+)
+```
+
+```{r}
+
+( df_prefire = burnedData %>% 
+    mutate(preYear = maxYr - 1) %>%
+    dplyr::select(row_id, dataYear, maxYr, preYear, countYr, ba:blue, csi:green, mirbi:nir, red, savi:vi6t) %>%
+    rowwise() %>%
+  mutate(match =  (dataYear %in% preYear)) %>%
+  filter(match) %>% # Keep only rows where any match occurs
+  mutate(match_type = case_when(
+    dataYear %in% preYear ~ "pre")) %>%
+    filter(blue!=-9999.0	) %>%
+    filter(nbrt1 !=-9999.0) %>%
+  mutate(tx="prefire") %>%
+    rename_with(~ paste0(.,"_pre"), -row_id)
+)
+
+```
+
+```{r}
+unique(df_burned$maxYr)
+unique(unburnedData$dataYear)
+n_distinct(unburnedData$row_id)
+n_distinct(unburnedData$ID)
+```
+
+# Calculate delta varaibles
+prefire - postfire
+```{r}
+( delta_post_variables = df_burned %>% 
+  full_join(., df_prefire, by=c("row_id")) %>%
+  rename(dataYear = dataYear_post, maxYr = maxYr_post, countYr = countYr_post) %>%
+  select(row_id:maxYr, countYr:vi6t_post, ba_pre:vi6t_pre) %>%
+  mutate(across(ends_with("_pre"), .names = "{col}_diff") - across(ends_with("_post"))) %>%
+ rename_with(~ sub("_\\d+", "", .), ends_with("_diff")) %>%
+  select(row_id, contains("_post"), contains("_diff")) %>%
+   rename_with(~ gsub("_post$", "", .x)) %>%
+   rename_with(~ gsub("_pre", "", .x)) %>%
+   mutate(tx = "burned")
+)
+ 
+```
+
+
+ 
+
+
+
+# Combine burned and unburned  into df
+
+```{r}
+( combine = bind_rows(df_burned, df_unburned) %>%
+    dplyr::select(row_id, tx, dataYear, maxYr, countYr, ba:vi6t))
+```
+
+
+```{r}
+( delta_post_combine = bind_rows(delta_post_variables, unburned_delta_post) )
+```
+# Write to csv
+
+```{r}
+write.csv( combine, '../outputs/cleanedSamplePoints/2025_05_16sampledMultiIndexAK.csv', row.names=F)
+```
+
+```{r}
+write.csv(delta_post_combine, '../outputs/cleanedSamplePoints/2025-05-17sampledMultiIndexAK_delta_post.csv', row.names=F)
+```

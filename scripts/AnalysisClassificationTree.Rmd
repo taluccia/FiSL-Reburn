@@ -1,0 +1,504 @@
+---
+title: "Classification Tree"
+author: "Anna Talucci"
+date: "2025-03-26"
+output: html_document
+---
+
+```{r clear environment, include=FALSE}
+rm(list=ls())
+```
+
+# Overview
+
+PCA of LCC data
+
+https://www.tidymodels.org/start/tuning/
+
+
+# Packages
+
+```{r}
+library(tidyverse)
+#library(FactoMineR)  # For PCA
+#library(factoextra)  # For visualization
+library(rpart)
+library(rpart.plot)# for visualizing a decision tree
+
+library(tidymodels)  # for the tune package, along with the rest of tidymodels
+
+# Helper packages
+library(rpart.plot)  
+library(vip)         # for variable importance plots
+library(MASS)
+library(randomForest)
+library(caret)
+library(ranger)
+library(xgboost)
+library(kernlab)
+library(yardstick)
+```
+
+
+
+# Data
+
+```{r}
+lcc = read_csv("../data/LCC_data/LC_Plot_ReburnData_20250311.csv")
+```
+
+```{r}
+unburnList = list.files("../data/multiIndex/multiIndexFieldUnburned", pattern=".csv$", full.names=TRUE)
+```
+
+```{r eval=FALSE, include=FALSE}
+
+unburnData = unburnList %>% 
+                map_df(~ read_csv(.x) %>% 
+                mutate(filename = tools::file_path_sans_ext(basename(.x)))) %>%
+                separate(filename, into = c("file", "dataYear"), sep = "_", convert = TRUE, extra = "merge")
+```
+
+```{r}
+csvList = list.files("../data/multiIndex/multiIndexFieldBurned", pattern=".csv$", full.names=TRUE)
+```
+
+```{r}
+
+burnedData = csvList %>% 
+                map_df(~ read_csv(.x) %>% 
+                mutate(filename = tools::file_path_sans_ext(basename(.x)))) %>%
+                separate(filename, into = c("file", "dataYear"), sep = "_", convert = TRUE, extra = "merge")
+```
+
+
+
+# View Data
+
+## LCC
+
+```{r}
+lcc
+```
+
+## Burned
+
+```{r}
+burnedData
+```
+
+```{r}
+names(burnedData)
+```
+
+
+
+# Organize data
+
+```{r}
+( df_burned = burnedData %>% 
+    mutate(postYear = rcnt_br +1) %>%
+    dplyr::select(row_id, plot, site, unq_st_, dataYear, rcnt_br, postYear, fire, ba:evi, green, mirbi:nir, red, savi, swir1:thermal, vi43:vi6t) %>%
+    rowwise() %>%
+  mutate(match =  (dataYear %in% postYear)) %>%
+  filter(match) %>% # Keep only rows where any match occurs
+  mutate(match_type = case_when(
+    dataYear %in% postYear ~ "post")) 
+)
+```
+
+```{r}
+( df_unburned = burnedData %>% 
+    mutate(preYear = rcnt_br - 1) %>%
+    dplyr::select(row_id, plot, site, unq_st_, dataYear, rcnt_br, preYear, fire, ba:evi, green, mirbi:nir, red, savi, swir1:thermal, vi43:vi6t) %>%
+    rowwise() %>%
+  mutate(match =  (dataYear %in% preYear)) %>%
+  filter(match) %>% # Keep only rows where any match occurs
+  mutate(match_type = case_when(
+    dataYear %in% preYear ~ "pre")) %>%
+    mutate(tx = "unburned")
+)
+```
+
+
+```{r}
+sort(unique(lcc$second_burn))
+
+lcc %>% filter(second_burn %in% c("2004", "2005", "2007", "2011", "2018"))
+```
+
+```{r}
+( lcc_burns = lcc %>% 
+  mutate(across(c(recent_burn, second_burn, triple_burn), as.numeric, .names = "num_{.col}")) %>%
+  mutate(num_burns = rowSums(!is.na(across(starts_with("num_"))))) %>%
+  dplyr::select(row_id, num_burns, recent_burn, second_burn, triple_burn) )
+```
+
+```{r}
+( lcc_unburn = lcc %>% 
+  mutate(across(c(recent_burn, second_burn, triple_burn), as.numeric, .names = "num_{.col}")) %>%
+  mutate(num_burns = rowSums(!is.na(across(starts_with("num_"))))) %>%
+  dplyr::select(row_id, num_burns, recent_burn, second_burn, triple_burn) )
+```
+
+```{r}
+
+( burnedData = df_burned %>% 
+    left_join(., lcc_burns, by=c("row_id")) %>%
+    dplyr::select(num_burns, ba:vi6t)
+)
+```
+
+```{r}
+( unburnedData = df_unburned %>% 
+    left_join(., lcc_unburn, by=c("row_id")) %>%
+    filter(second_burn != 2018) %>%
+    dplyr::select(num_burns, tx, ba:vi6t) %>%
+    mutate(timesBurned = "control") %>%
+    dplyr::select(timesBurned,tx,  ba:vi6t)
+)
+```
+
+
+
+
+
+
+
+
+
+```{r}
+
+( df = df_burned %>% 
+    left_join(., lcc_burns, by=c("row_id")) %>%
+    mutate(across( starts_with("num_"), ~ case_when(
+    . == 1 ~ "one",
+    . == 2  ~ "two",
+    . == 3 ~ "three",
+    TRUE ~ "other"), .names ="timesBurned")) %>%
+    dplyr::select(timesBurned, ba:vi6t) %>% 
+    mutate(tx = "burned") %>%
+    bind_rows(., unburnedData)
+)
+```
+
+```{r}
+unique(df$timesBurned)
+```
+
+
+## select variables for random forest
+
+```{r}
+( df_rf = df %>%
+  dplyr::select(tx, ba:vi6t) %>%
+    mutate(tx = as.factor(tx))
+)
+unique(df_rf$tx)
+```
+```{r}
+# Load libraries
+library(palmerpenguins)  # Penguins dataset
+library(ranger)          # Random forest package
+library(caret)           # For data splitting and evaluation
+
+```
+
+# Decision Tree
+
+```{r}
+modelLookup('ranger')
+```
+## Tidymodels with tuning
+
+```{r}
+df_rf
+```
+
+```{r}
+set.seed(31)
+cell_split <- initial_split(df_rf, strata = tx)
+
+cell_train <- training(cell_split)
+cell_test  <- testing(cell_split)
+```
+
+```{r}
+cell_test
+cell_train
+```
+
+```{r}
+tune_spec <- 
+  decision_tree(
+    cost_complexity = tune(), #can adjust
+    tree_depth = tune() #can adjust
+  ) %>% 
+  set_engine("rpart") %>% 
+  set_mode("classification")
+
+tune_spec
+#> Decision Tree Model Specification (classification)
+#> 
+#> Main Arguments:
+#>   cost_complexity = tune()
+#>   tree_depth = tune()
+#> 
+#> Computational engine: rpart
+```
+
+```{r}
+tree_grid <- grid_regular(cost_complexity(),
+                          tree_depth(),
+                          levels = 5)
+```
+
+```{r}
+set.seed(23)
+cell_folds <- vfold_cv(cell_train)
+```
+
+```{r}
+set.seed(35)
+
+tree_wf <- workflow() %>%
+  add_model(tune_spec) %>%
+  add_formula(tx ~ .)
+
+tree_res <- 
+  tree_wf %>% 
+  tune_grid(
+    resamples = cell_folds,
+    grid = tree_grid
+    )
+
+tree_res
+```
+
+```{r}
+tree_res %>% 
+  collect_metrics()
+
+```
+
+```{r}
+tree_res %>%
+  collect_metrics() %>%
+  mutate(tree_depth = factor(tree_depth)) %>%
+  ggplot(aes(cost_complexity, mean, color = tree_depth)) +
+  geom_line(linewidth = 1.5, alpha = 0.6) +
+  geom_point(size = 2) +
+  facet_wrap(~ .metric, scales = "free", nrow = 2) +
+  scale_x_log10(labels = scales::label_number()) +
+  scale_color_viridis_d(option = "plasma", begin = .9, end = 0)
+
+```
+
+```{r}
+tree_res %>%
+  show_best(metric = "accuracy")
+
+```
+
+
+```{r}
+best_tree <- tree_res %>%
+  select_best(metric = "accuracy")
+
+best_tree
+
+```
+
+### FInalize model
+
+```{r}
+final_wf <- 
+  tree_wf %>% 
+  finalize_workflow(best_tree)
+
+final_wf
+```
+
+### Assess model performance with test data
+
+
+We can use the function last_fit() with our finalized model; this function fits the finalized model on the full training data set and evaluates the finalized model on the testing data.
+```{r}
+final_fit <- 
+  final_wf %>%
+  last_fit(cell_split) 
+
+final_fit %>%
+  collect_metrics()
+
+final_fit %>%
+ collect_predictions() 
+```
+
+```{r}
+final_fit %>%
+ collect_predictions() %>% 
+  roc_curve(tx, .pred_burned) %>% 
+  autoplot()
+```
+
+```{r}
+final_fit %>%
+ collect_predictions() %>% 
+  roc_curve(tx, .pred_unburned) %>% 
+  autoplot()
+```
+
+```{r}
+final_tree <- extract_workflow(final_fit)
+final_tree
+```
+
+```{r}
+final_tree %>%
+  extract_fit_engine() %>%
+  rpart.plot(roundint = FALSE)
+```
+
+
+
+```{r}
+final_tree %>% 
+  extract_fit_parsnip() %>% 
+  vip()
+```
+
+# Predict
+```{r}
+final_fit <- fit(final_wf, data = cell_test)
+
+```
+
+
+```{r}
+sample = read_csv('../outputs/cleanedSamplePoints/sampledMultiIndexAK.csv')
+```
+
+```{r}
+df_rf_sample = sample %>% dplyr::select(ba:vi6t)
+```
+
+
+```{r}
+predictions <- predict(final_fit, sample)
+
+```
+
+```{r}
+probabilities <- predict(final_fit, df_rf_sample, type = "prob")
+
+```
+
+```{r}
+( df_rf_sample_with_preds <-  sample %>%
+  bind_cols(predictions)
+)
+```
+
+```{r}
+( df_rf_sample_with_preds <-  df_rf_sample %>%
+  bind_cols(probabilities)
+)
+```
+
+# Machine Learning model comparison
+
+```{r}
+# Set seed for reproducibility
+set.seed(123)
+
+df = df_rf
+
+# Split data
+df_split <- initial_split(df, prop = 0.8, strata = tx)
+df_train <- training(df_split)
+df_test <- testing(df_split)
+# 5-fold cross-validation
+cv_folds <- vfold_cv(df_train, v = 5, strata = tx)
+# Recipe: normalize only if needed
+base_recipe <- recipe(tx ~ ., data = df_train) %>%
+  step_zv(all_predictors()) %>%
+  step_dummy(all_nominal_predictors())
+# Model-specific preprocessing
+norm_recipe <- base_recipe %>%
+  step_normalize(all_numeric_predictors())
+# Logistic Regression
+log_spec <- logistic_reg() %>%
+  set_engine("glm") %>%
+  set_mode("classification")
+# SVM Linear
+svm_linear_spec <- svm_linear(cost = tune()) %>%
+  set_engine("kernlab") %>%
+  set_mode("classification")
+# SVM Radial
+svm_rbf_spec <- svm_rbf(cost = tune(), rbf_sigma = tune()) %>%
+  set_engine("kernlab") %>%
+  set_mode("classification")
+# Decision Tree
+tree_spec <- decision_tree(cost_complexity = tune(), tree_depth = tune()) %>%
+  set_engine("rpart") %>%
+  set_mode("classification")
+# Random Forest
+rf_spec <- rand_forest(mtry = tune(), min_n = tune(), trees = 500) %>%
+  set_engine("ranger") %>%
+  set_mode("classification")
+# Gradient Boosted Trees (XGBoost)
+xgb_spec <- boost_tree(trees = 500, learn_rate = tune(), mtry = tune(), tree_depth = tune()) %>%
+  set_engine("xgboost") %>%
+  set_mode("classification")
+# Workflows
+log_wf <- workflow() %>%
+  add_model(log_spec) %>%
+  add_recipe(base_recipe)
+svm_linear_wf <- workflow() %>%
+  add_model(svm_linear_spec) %>%
+  add_recipe(norm_recipe)
+svm_rbf_wf <- workflow() %>%
+  add_model(svm_rbf_spec) %>%
+  add_recipe(norm_recipe)
+tree_wf <- workflow() %>%
+  add_model(tree_spec) %>%
+  add_recipe(base_recipe)
+rf_wf <- workflow() %>%
+  add_model(rf_spec) %>%
+  add_recipe(base_recipe)
+xgb_wf <- workflow() %>%
+  add_model(xgb_spec) %>%
+  add_recipe(base_recipe)
+# Tune each model
+my_metrics <- yardstick::metric_set(yardstick::roc_auc, yardstick::accuracy)
+tune_results <- list(
+  log = fit_resamples(log_wf, resamples = cv_folds, metrics = my_metrics, control = control_resamples(save_pred = TRUE)),
+  
+  svm_linear = tune_grid(svm_linear_wf, resamples = cv_folds, grid = 10, metrics = my_metrics),
+  
+  svm_rbf = tune_grid(svm_rbf_wf, resamples = cv_folds, grid = 10, metrics = my_metrics),
+  
+  tree = tune_grid(tree_wf, resamples = cv_folds, grid = 10, metrics = my_metrics),
+  
+  rf = tune_grid(rf_wf, resamples = cv_folds, grid = 10, metrics = my_metrics),
+  
+  xgb = tune_grid(xgb_wf, resamples = cv_folds, grid = 10, metrics = my_metrics)
+)
+# Compare models
+library(purrr)
+results_df <- map_dfr(tune_results, ~collect_metrics(.x), .id = "model")
+# Select best model based on highest ROC AUC
+best_models <- results_df %>%
+  filter(.metric == "roc_auc") %>%
+  group_by(model) %>%
+  slice_max(mean, n = 1) %>%
+  arrange(desc(mean))
+print(best_models)
+```
+
+```{r}
+write.csv(best_models, '../outputs/MLselection/2025-05-19_MLSelection_deltaVariablesExclude.csv', row.names=F)
+```
+
+**THE END**

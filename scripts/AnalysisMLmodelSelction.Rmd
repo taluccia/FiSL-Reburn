@@ -1,0 +1,161 @@
+---
+title: "Analysis ML Model Selection"
+author: "Anna Talucci"
+date: "2025-05-17"
+output: html_document
+---
+
+
+```{r clear environment, include=FALSE}
+rm(list=ls())
+```
+
+# Overview
+
+ML Model Selection
+
+https://www.tidymodels.org/start/tuning/
+
+
+# Packages
+
+```{r}
+library(tidyverse)
+#library(FactoMineR)  # For PCA
+#library(factoextra)  # For visualization
+library(rpart)
+library(rpart.plot)# for visualizing a decision tree
+
+library(tidymodels)  # for the tune package, along with the rest of tidymodels
+
+# Helper packages
+library(rpart.plot)  
+library(vip)         # for variable importance plots
+library(MASS)
+library(randomForest)
+library(caret)
+library(ranger)
+library(xgboost)
+library(kernlab)
+library(yardstick)
+```
+
+
+
+# Data
+
+```{r}
+allData = read_csv("../outputs/cleanedSamplePoints/2025-05-17sampledMultiIndexAK_delta_post.csv")
+```
+
+
+
+
+
+# View Data
+
+
+
+```{r}
+#( allData = allData %>% dplyr::select(-row_id) %>% drop_na() )
+( deltaData = allData %>% dplyr::select(contains("diff"), tx) %>%  drop_na() )
+#( postData= allData %>% dplyr::select(-row_id) %>% drop_na() )
+```
+
+
+# Machine Learning model comparison
+
+```{r}
+# Set seed for reproducibility
+set.seed(123)
+
+df= deltaData
+
+# Split data
+df_split <- initial_split(df, prop = 0.8, strata = tx)
+df_train <- training(df_split)
+df_test <- testing(df_split)
+# 5-fold cross-validation
+cv_folds <- vfold_cv(df_train, v = 5, strata = tx)
+# Recipe: normalize only if needed
+base_recipe <- recipe(tx ~ ., data = df_train) %>%
+  step_zv(all_predictors()) %>%
+  step_dummy(all_nominal_predictors())
+# Model-specific preprocessing
+norm_recipe <- base_recipe %>%
+  step_normalize(all_numeric_predictors())
+# Logistic Regression
+log_spec <- logistic_reg() %>%
+  set_engine("glm") %>%
+  set_mode("classification")
+# SVM Linear
+svm_linear_spec <- svm_linear(cost = tune()) %>%
+  set_engine("kernlab") %>%
+  set_mode("classification")
+# SVM Radial
+svm_rbf_spec <- svm_rbf(cost = tune(), rbf_sigma = tune()) %>%
+  set_engine("kernlab") %>%
+  set_mode("classification")
+# Decision Tree
+tree_spec <- decision_tree(cost_complexity = tune(), tree_depth = tune()) %>%
+  set_engine("rpart") %>%
+  set_mode("classification")
+# Random Forest
+rf_spec <- rand_forest(mtry = tune(), min_n = tune(), trees = 500) %>%
+  set_engine("ranger") %>%
+  set_mode("classification")
+# Gradient Boosted Trees (XGBoost)
+xgb_spec <- boost_tree(trees = 500, learn_rate = tune(), mtry = tune(), tree_depth = tune()) %>%
+  set_engine("xgboost") %>%
+  set_mode("classification")
+# Workflows
+log_wf <- workflow() %>%
+  add_model(log_spec) %>%
+  add_recipe(base_recipe)
+svm_linear_wf <- workflow() %>%
+  add_model(svm_linear_spec) %>%
+  add_recipe(norm_recipe)
+svm_rbf_wf <- workflow() %>%
+  add_model(svm_rbf_spec) %>%
+  add_recipe(norm_recipe)
+tree_wf <- workflow() %>%
+  add_model(tree_spec) %>%
+  add_recipe(base_recipe)
+rf_wf <- workflow() %>%
+  add_model(rf_spec) %>%
+  add_recipe(base_recipe)
+xgb_wf <- workflow() %>%
+  add_model(xgb_spec) %>%
+  add_recipe(base_recipe)
+# Tune each model
+my_metrics <- yardstick::metric_set(yardstick::roc_auc, yardstick::accuracy)
+tune_results <- list(
+  log = fit_resamples(log_wf, resamples = cv_folds, metrics = my_metrics, control = control_resamples(save_pred = TRUE)),
+  
+  svm_linear = tune_grid(svm_linear_wf, resamples = cv_folds, grid = 10, metrics = my_metrics),
+  
+  svm_rbf = tune_grid(svm_rbf_wf, resamples = cv_folds, grid = 10, metrics = my_metrics),
+  
+  tree = tune_grid(tree_wf, resamples = cv_folds, grid = 10, metrics = my_metrics),
+  
+  rf = tune_grid(rf_wf, resamples = cv_folds, grid = 10, metrics = my_metrics),
+  
+  xgb = tune_grid(xgb_wf, resamples = cv_folds, grid = 10, metrics = my_metrics)
+)
+# Compare models
+library(purrr)
+results_df <- map_dfr(tune_results, ~collect_metrics(.x), .id = "model")
+# Select best model based on highest ROC AUC
+best_models <- results_df %>%
+  filter(.metric == "roc_auc") %>%
+  group_by(model) %>%
+  slice_max(mean, n = 1) %>%
+  arrange(desc(mean))
+print(best_models)
+```
+
+```{r}
+write.csv(best_models, '../outputs/MLselection/2025-05-19_MLSelection_deltaVariablesOnly.csv', row.names=F)
+```
+
+**THE END**
