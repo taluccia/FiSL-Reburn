@@ -35,6 +35,10 @@ Alternative Groupings (Used in Some Studies):
 6-15 years: Intermediate recovery phase.
 16-30+ years: Long-term recovery.
 
+# Processing Albedo
+
+1.  COLAB script Moving files around in Google Drive 
+2. COLAB script moving files from google drive to goolge cloud bucket
 
 # Scripts
 
