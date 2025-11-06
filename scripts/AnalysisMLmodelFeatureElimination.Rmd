@@ -1,0 +1,513 @@
+---
+title: "Analysis ML Model Selection"
+author: "Anna Talucci"
+date: "2025-05-17"
+output: html_document
+---
+
+
+```{r clear environment, include=FALSE}
+rm(list=ls())
+```
+
+# Overview
+
+ML Model Selection
+
+https://www.tidymodels.org/start/tuning/
+
+
+# Packages
+
+```{r}
+
+library(tidyverse)
+library(tidymodels)
+library(caret)
+```
+
+
+
+
+# Data
+
+```{r}
+allData = read_csv("../outputs/cleanedSamplePoints/2025-05-17sampledMultiIndexAK_delta_post.csv")
+```
+
+# View Data
+
+```{r}
+( allData = allData %>% dplyr::select(-row_id) %>% drop_na() %>% mutate(tx = as.factor(tx)) )
+#( deltaData = allData %>% dplyr::select(contains("diff"), tx) %>%  drop_na() %>% mutate(tx = as.factor(tx)) )
+#( postData= allData %>% dplyr::select(-row_id) %>% dplyr::select(-contains("diff")) %>% drop_na() %>% mutate(tx = as.factor(tx)) )
+```
+
+
+
+# Machine Learning model comparison
+
+```{r}
+# Set seed for reproducibility
+set.seed(123)
+
+df= allData
+
+# Split data
+df_split <- initial_split(df, prop = 0.8, strata = tx)
+df_train <- training(df_split)
+df_test <- testing(df_split)
+```
+
+
+```{r}
+
+x <- df_train[, setdiff(names(df_train), "tx")]
+y <- df_train$tx
+
+# Define RFE control
+ctrl <- rfeControl(
+  functions = rfFuncs,           # Use random forest functions
+  method = "cv",                 # Cross-validation
+  number = 5,                    # 5-fold CV
+  verbose = TRUE
+)
+
+# Run RFE
+set.seed(123)
+rfe_result <- rfe(
+  x = x,
+  y = y,
+  sizes = c(5, 10, 15, 20, 25),  # Try subsets of predictors
+  rfeControl = ctrl
+)
+
+# View top predictors
+rfe_result$optVariables
+```
+
+
+```{r}
+# ensure the results are repeatable
+set.seed(7)
+# define the control using a random forest selection function
+control <- rfeControl(functions=rfFuncs, method="cv", number=10)
+# run the RFE algorithm
+results <- rfe(x=x, y=y, sizes=c(1:48), rfeControl=control)
+# summarize the results
+print(results)
+# list the chosen features
+predictors(results)
+
+# list the chosen features
+selected_features <- predictors(results)
+print(selected_features)
+
+# Write selected features to CSV
+write.csv(data.frame(Selected_Features = selected_features), 
+          "../outputs/rfe/selected_features.csv", 
+          row.names = FALSE)
+
+# Write performance metrics from RFE results
+write.csv(results$results, 
+          "../outputs/rfe/rfe_results_summary.csv", 
+          row.names = FALSE)
+# plot the results
+# Set up the PNG device
+png("../figures/rfe/2025-07-20_RFE_plot.png", width = 800, height = 600, res = 100)
+
+# Create your base R plot
+plot(results, type=c("g", "o"), main = "Recursive Feature Elimination")
+
+# Close the device to save the file
+dev.off()
+
+
+```
+
+
+
+
+
+
+
+
+
+
+
+```{r}
+# Count columns with no dimension reduction
+base_rec <- recipe(tx~., data = df_train) %>% 
+  step_dummy(all_nominal(), one_hot = TRUE) 
+
+base_rec %>% prep() %>% juice()
+```
+
+```{r}
+# Basic dimension reduction
+basic_dim_rec <- recipe(tx~., data = df_train) %>% 
+  step_impute_mean(all_numeric(), -all_outcomes()) %>% 
+  step_nzv(all_numeric(), -all_outcomes()) %>% 
+  step_lincomb(all_numeric(), -all_outcomes()) %>% 
+  step_dummy(all_nominal()) 
+
+basic_dim_rec %>% prep() %>% juice() %>% ncol()
+```
+
+```{r}
+# Including correlation filter removes even more 
+full_dim_rec <- recipe(tx~., data = df_train) %>% 
+  step_impute_mean(all_numeric(), -all_outcomes()) %>% 
+  step_nzv(all_numeric(), -all_outcomes()) %>% 
+  step_lincomb(all_numeric(), -all_outcomes()) %>% 
+  step_corr(all_numeric(), -all_outcomes()) %>% 
+  step_dummy(all_nominal()) 
+
+full_dim_rec %>% prep() %>% juice() 
+```
+
+
+
+```{r}
+# Use recursive feature elimination
+rfe_model <- rand_forest(mode = "classification") %>% set_engine("ranger", importance = "impurity")
+
+rfe_rec <- recipe(tx~., data = df_train) %>% 
+  step_dummy(all_nominal(), one_hot = TRUE) %>% 
+  step_impute_median(all_numeric(), -all_outcomes()) %>% 
+  step_select_vip(all_predictors(), outcome = "tx", model = rfe_model, threshold = 0.9)
+
+rfe_rec %>% 
+  prep() %>% 
+  juice()
+
+rfe_rec <- recipe(tx ~ ., data = df_train) %>% 
+  step_dummy(all_nominal_predictors(), one_hot = TRUE) %>% 
+  step_impute_median(all_numeric_predictors()) %>% 
+  step_select_vip(
+    outcome = "tx", 
+    model = rfe_model, 
+    top_n = 20  # or use `threshold = 0.9`
+  )
+
+# Prep and apply the recipe
+rfe_prep <- prep(rfe_rec)
+rfe_data <- juice(rfe_prep)
+```
+
+
+```{r}
+
+
+# 5-fold cross-validation
+cv_folds <- vfold_cv(df_train, v = 5, strata = tx)
+# Recipe: normalize only if needed
+base_recipe <- recipe(tx ~ ., data = df_train) %>%
+  step_zv(all_predictors()) %>%
+  step_dummy(all_nominal_predictors())
+# Model-specific preprocessing
+norm_recipe <- base_recipe %>%
+  step_normalize(all_numeric_predictors())
+# Logistic Regression
+log_spec <- logistic_reg() %>%
+  set_engine("glm") %>%
+  set_mode("classification")
+# SVM Linear
+svm_linear_spec <- svm_linear(cost = tune()) %>%
+  set_engine("kernlab") %>%
+  set_mode("classification")
+# SVM Radial
+svm_rbf_spec <- svm_rbf(cost = tune(), rbf_sigma = tune()) %>%
+  set_engine("kernlab") %>%
+  set_mode("classification")
+# Decision Tree
+tree_spec <- decision_tree(cost_complexity = tune(), tree_depth = tune()) %>%
+  set_engine("rpart") %>%
+  set_mode("classification")
+# Random Forest
+rf_spec <- rand_forest(mtry = tune(), min_n = tune(), trees = 500) %>%
+  set_engine("ranger", importance = "impurity") %>%
+  set_mode("classification")
+# Gradient Boosted Trees (XGBoost)
+xgb_spec <- boost_tree(trees = 500, learn_rate = tune(), mtry = tune(), tree_depth = tune()) %>%
+  set_engine("xgboost") %>%
+  set_mode("classification")
+# Workflows
+log_wf <- workflow() %>%
+  add_model(log_spec) %>%
+  add_recipe(base_recipe)
+svm_linear_wf <- workflow() %>%
+  add_model(svm_linear_spec) %>%
+  add_recipe(norm_recipe)
+svm_rbf_wf <- workflow() %>%
+  add_model(svm_rbf_spec) %>%
+  add_recipe(norm_recipe)
+tree_wf <- workflow() %>%
+  add_model(tree_spec) %>%
+  add_recipe(base_recipe)
+rf_wf <- workflow() %>%
+  add_model(rf_spec) %>%
+  add_recipe(base_recipe)
+xgb_wf <- workflow() %>%
+  add_model(xgb_spec) %>%
+  add_recipe(base_recipe)
+# Tune each model
+my_metrics <- yardstick::metric_set(yardstick::roc_auc, yardstick::accuracy)
+tune_results <- list(
+  log = fit_resamples(log_wf, resamples = cv_folds, metrics = my_metrics, control = control_resamples(save_pred = TRUE)),
+  
+  svm_linear = tune_grid(svm_linear_wf, resamples = cv_folds, grid = 10, metrics = my_metrics),
+  
+  svm_rbf = tune_grid(svm_rbf_wf, resamples = cv_folds, grid = 10, metrics = my_metrics),
+  
+  tree = tune_grid(tree_wf, resamples = cv_folds, grid = 10, metrics = my_metrics),
+  
+  rf = tune_grid(rf_wf, resamples = cv_folds, grid = 10, metrics = my_metrics),
+  
+  xgb = tune_grid(xgb_wf, resamples = cv_folds, grid = 10, metrics = my_metrics)
+)
+# Compare models
+library(purrr)
+results_df <- map_dfr(tune_results, ~collect_metrics(.x), .id = "model")
+# Select best model based on highest ROC AUC
+best_models <- results_df %>%
+  filter(.metric == "roc_auc") %>%
+  group_by(model) %>%
+  slice_max(mean, n = 1) %>%
+  arrange(desc(mean))
+print(best_models)
+```
+
+```{r eval=FALSE, include=FALSE}
+write.csv(best_models, '../outputs/MLselection/2025-05-19_MLSelection_deltaVariablesOnly.csv', row.names=F)
+```
+
+
+# Fun RF model
+
+```{r}
+# Extract best parameters for random forest based on ROC AUC
+best_rf_params <- select_best(tune_results$rf, metric = "roc_auc")
+print(best_rf_params)
+
+```
+
+```{r}
+# Finalize the rf workflow
+final_rf_wf <- finalize_workflow(rf_wf, best_rf_params)
+
+```
+
+```{r}
+# Fit the finalized random forest model
+final_rf_fit <- fit(final_rf_wf, data = df_train)
+final_rf_fit
+```
+
+```{r}
+library(parsnip)
+library(recipes)
+library(magrittr)
+
+# create a preprocessing recipe
+rec <- iris %>%
+recipe(Species ~ .) %>%
+step_select_vip(all_predictors(), model = base_model, top_p = 2,
+                outcome = "Species")
+
+prepped <- prep(rec)
+
+# create a model specification
+clf <- decision_tree(mode = "classification") %>%
+set_engine("rpart")
+
+clf_fitted <- clf %>%
+  fit(Species ~ ., juice(prepped))
+```
+
+```{r}
+# Predict on test data
+( rf_preds <- predict(final_rf_fit, df_test, type = "prob") %>%
+  bind_cols(predict(final_rf_fit, df_test)) %>%
+  bind_cols(df_test)
+)
+```
+```{r}
+roc_auc(rf_preds, truth = tx, .pred_burned)
+```
+
+```{r}
+# Evaluate performance
+library(yardstick)
+rf_metrics <- rf_preds %>%
+  metrics(truth = tx, estimate = .pred_class, .pred_burned) %>%  # change `.pred_1` to your positive class
+  bind_rows(roc_auc(rf_preds, truth = tx, .pred_burned))          # change `.pred_1` as needed
+print(rf_metrics)
+
+```
+
+```{r}
+final_rf_fit %>%
+  extract_fit_parsnip() %>%
+  vip() +
+  ggtitle("All indices (post and delta)")
+```
+
+```{r}
+final_rf_fit %>%
+  extract_fit_parsnip() %>%
+  vip(num_features = 20) + # Top 20 important features
+  ggtitle("All indices (post and delta)") 
+
+```
+
+# Trying to figure our recursive feature elimintation code
+
+## Recipe for recursive feature elimination
+
+```{r}
+rec <- recipe(outcome ~ ., data = train) %>%
+  step_normalize(all_numeric_predictors())
+```
+
+# RFE
+# define a base model to use for feature importances
+base_model <- rand_forest(mode = "classification") %>%
+  set_engine("ranger", importance = "permutation")
+
+# create a preprocessing recipe
+rec <- iris %>%
+recipe(Species ~ .) %>%
+step_select_vip(all_predictors(), model = base_model, top_p = 2,
+                outcome = "Species")
+
+prepped <- prep(rec)
+
+# create a model specification
+clf <- decision_tree(mode = "classification") %>%
+set_engine("rpart")
+
+clf_fitted <- clf %>%
+  fit(Species ~ ., juice(prepped))
+```{r, with RFE}
+
+
+# Set seed
+set.seed(123)
+
+df= allData
+
+# Split data
+df_split <- initial_split(df, prop = 0.8, strata = tx)
+df_train <- training(df_split)
+df_test <- testing(df_split)
+
+# Cross-validation folds
+cv_folds <- vfold_cv(df_train, v = 5, strata = tx)
+
+# Recipe
+base_recipe <- recipe(tx ~ ., data = df_train) %>%
+  step_zv(all_predictors()) %>%
+  step_dummy(all_nominal_predictors())
+
+norm_recipe <- base_recipe %>%
+  step_normalize(all_numeric_predictors())
+
+# Model specifications
+log_spec <- logistic_reg() %>% set_engine("glm") %>% set_mode("classification")
+
+svm_linear_spec <- svm_linear(cost = tune()) %>%
+  set_engine("kernlab") %>%
+  set_mode("classification")
+
+svm_rbf_spec <- svm_rbf(cost = tune(), rbf_sigma = tune()) %>%
+  set_engine("kernlab") %>%
+  set_mode("classification")
+
+tree_spec <- decision_tree(cost_complexity = tune(), tree_depth = tune()) %>%
+  set_engine("rpart") %>%
+  set_mode("classification")
+
+rf_spec <- rand_forest(mtry = tune(), min_n = tune(), trees = 500) %>%
+  set_engine("ranger", importance = "impurity") %>%
+  set_mode("classification")
+
+xgb_spec <- boost_tree(trees = 500, learn_rate = tune(), mtry = tune(), tree_depth = tune()) %>%
+  set_engine("xgboost") %>%
+  set_mode("classification")
+
+# Workflows
+log_wf <- workflow() %>% add_model(log_spec) %>% add_recipe(base_recipe)
+svm_linear_wf <- workflow() %>% add_model(svm_linear_spec) %>% add_recipe(norm_recipe)
+svm_rbf_wf <- workflow() %>% add_model(svm_rbf_spec) %>% add_recipe(norm_recipe)
+tree_wf <- workflow() %>% add_model(tree_spec) %>% add_recipe(base_recipe)
+rf_wf <- workflow() %>% add_model(rf_spec) %>% add_recipe(base_recipe)
+xgb_wf <- workflow() %>% add_model(xgb_spec) %>% add_recipe(base_recipe)
+
+# Metrics
+my_metrics <- metric_set(roc_auc, accuracy)
+
+# Control for RFE
+ctrl_rfe <- control_race(verbose_elim = TRUE, parallel_over = "resamples")
+
+# Tune and/or select features
+
+# Logistic regression: no tuning
+log_fit <- fit_resamples(log_wf, resamples = cv_folds, metrics = my_metrics, control = control_resamples(save_pred = TRUE))
+
+# SVM Linear: tuning
+svm_linear_fit <- tune_grid(svm_linear_wf, resamples = cv_folds, grid = 10, metrics = my_metrics)
+
+# Control settings for RFE
+#ctrl_rfe <- finetune::control_rfe(save_pred = TRUE)
+
+# SVM RBF: with RFE
+svm_rbf_rfe <- select_features(
+  svm_rbf_wf,
+  resamples = cv_folds,
+  control = ctrl_rfe,
+  options = list(subsets = c(5, 10, 15, 20)), # adjust as needed
+)
+
+# Decision tree: tuning
+tree_fit <- tune_grid(tree_wf, resamples = cv_folds, grid = 10, metrics = my_metrics)
+
+# Run RFE for Random Forest
+rf_rfe_results <- select_features(
+  rf_wf,
+  resamples = cv_folds,
+  control = ctrl_rfe,
+  options = rfe_opts(subsets = c(5, 10, 15, 20))
+)
+# XGBoost: with RFE
+xgb_rfe <- select_features(
+  xgb_wf,
+  resamples = cv_folds,
+  control = ctrl_rfe,
+  options = list(subsets = c(5, 10, 15, 20)),
+)
+
+# Collect all results
+tune_results <- list(
+  log = log_fit,
+  svm_linear = svm_linear_fit,
+  svm_rbf = svm_rbf_rfe,
+  tree = tree_fit,
+  rf = rf_rfe,
+  xgb = xgb_rfe
+)
+
+# Compare models
+results_df <- map_dfr(tune_results, ~collect_metrics(.x), .id = "model")
+
+best_models <- results_df %>%
+  filter(.metric == "roc_auc") %>%
+  group_by(model) %>%
+  slice_max(mean, n = 1) %>%
+  arrange(desc(mean))
+
+print(best_models)
+
+```
+
+**THE END**

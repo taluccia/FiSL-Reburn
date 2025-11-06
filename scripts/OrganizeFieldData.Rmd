@@ -1,0 +1,190 @@
+---
+title: "Organize Field data for classifier"
+author: "Anna Talucci"
+date: "2025-10-06"
+output: html_document
+---
+
+
+```{r clear environment, include=FALSE}
+rm(list=ls())
+```
+
+# Overview
+
+
+# Packages
+
+```{r}
+library(tidyverse)  # Data manipulation & visualization
+library(sf)
+library(mapview)
+```
+
+
+# Data
+
+```{r}
+lc = read_csv("../data/FISL_LC_Field/LC_Plot_cleaned_2025-04-16.csv")
+
+fisl = read_csv("../data/FISL_LC_Field/FiSL/FiSL_data.csv")
+
+```
+
+# View Data
+
+```{r}
+lc
+
+fisl
+
+```
+# Fix Known issues
+ Issues Identified 9-26-2025
+LC -- Fix Longitude coordinate for LC fire-site-plot ChitananaMooseheart	36	A, B, C
+
+```{r}
+lc %>% filter(fire == "FrozenBlackCalf")
+```
+
+```{r}
+( lc1 <- lc %>%
+  mutate(longitude = case_when(fire == "ChitananaMooseheart" & site == 36 & plot %in% c("A","B","C") ~ -151.458963, TRUE ~ longitude))
+)
+
+```
+
+```{r}
+lc1 %>% filter(fire %in% c("FrozenBlackCalf", "ChitananaMooseheart"))
+```
+
+
+
+
+
+## Check missing combustion calculations
+
+```{r}
+lc1
+
+fisl
+
+```
+
+```{r}
+lc1 %>% 
+  dplyr::select(fire, site, plot, latitude, longitude, recent_burn, second_burn, triple_burn) 
+```
+
+
+
+# Site level
+
+Aggregate LC and Fisl to site level and remove body data (which is included in the original combustion data) from fisl. 
+
+```{r}
+set.seed(56)
+
+
+( lc_site = lc1 %>% 
+    rename(lat = latitude, lon = longitude, fireYr = recent_burn, burnYr2 = second_burn, burnYr3 = triple_burn) %>%
+    group_by(fire, site) %>%
+    summarise(
+      lat = min(lat),
+      lon = min(lon),
+      fireYr = min(fireYr),
+      burnYr2 = min(burnYr2),
+      burnYr3 = min(burnYr3)
+    ) %>%
+    arrange(site) %>%
+    ungroup() %>%
+    mutate(project = "LC",
+           row_id = row_number(),
+         site_ID = paste0(project, "_", row_id )) %>%
+    relocate(site_ID, row_id) %>% 
+    mutate(diff_burn1_burn2 = fireYr-burnYr2, 
+           diff_burn2_burn3 = burnYr2-burnYr3) %>%
+    mutate(
+    xburned = case_when(
+      is.na(burnYr2) | is.na(burnYr3) ~ "once",
+      burnYr2 >= 1985 & (is.na(burnYr3) | burnYr3 < 1984) ~ "twice",
+      burnYr2 >= 1984 & burnYr3 >= 1984 ~ "triple",
+      TRUE ~ NA_character_
+    )
+  )
+)
+```
+```{r}
+unique(lc_site$fireYr)
+unique(lc_site$burnYr2)
+unique(lc_site$burnYr3)
+```
+```{r}
+n_distinct(lc_site$site_ID)
+n_distinct(lc_site$row_id)
+```
+
+
+### Spatialize
+
+```{r}
+df_to_sf_NAD83 <- function(x){
+  st_as_sf(x, coords = c("lon","lat"), crs = 4269, remove = FALSE) # X. Walker states crs epsg:3338 but it ends up in the ocean 
+}
+```
+
+
+```{r}
+( lc_site_pts_WGS84 = lc_site %>% 
+    df_to_sf_NAD83() %>% 
+    st_transform(., crs = 4326) %>% 
+    mutate(fireYr = as.character(fireYr)) %>% 
+  rename(ID = site_ID) )
+```
+```{r}
+st_write(lc_site_pts_WGS84, "../outputs/2025-10-06_LC_site_reburns_WGS84.shp", driver="ESRI Shapefile")
+```
+
+```{r}
+write_csv(lc_site, "../outputs/2025-10-06_LC_Site_reburns.csv")
+```
+
+## FISL
+
+```{r}
+( fisl_site = fisl_id %>% 
+  filter(plot %in% c("A","B","C")) %>%
+    select(ID:fire_name, year, site, plot, latitude, longitude,  comb.trees, comb.depth, comb.below) %>%
+    rename(lat = latitude, lon = longitude, fireYr = year, combusted_above = comb.trees, combusted_below = comb.below, burn_depth=comb.depth) %>%
+    group_by(fire_name, site) %>%
+    summarise(
+      ID_plot_list = paste(ID, collapse = ", "),
+      lat = min(lat),
+      lon = min(lon),
+      fireYr = mean(fireYr),
+      combusted_above = mean(combusted_above),
+      burn_depth = mean(burn_depth),
+      combusted_below = mean(combusted_below)
+    ) %>%
+    arrange(site) %>%
+    ungroup() %>%
+    mutate(project = "FISL",
+           row_id = row_number(),
+         site_ID = paste0(project, "_", row_id )) %>%
+    relocate(site_ID, row_id) 
+)
+```
+
+```{r}
+n_distinct(fisl_site$site_ID)
+n_distinct(fisl_site$row_id)
+n_distinct(fisl_site$lat)
+n_distinct(fisl_site$lon)
+```
+```{r}
+write_csv(lc_site, "../outputs/LCC_cleaned/csv/2025-09-30_LC_Site_fullCombustionID.csv")
+write_csv(fisl_site, "../outputs/LCC_cleaned/csv/2025-09-30_FISL_Site_fullCombustionID.csv")
+```
+
+
+

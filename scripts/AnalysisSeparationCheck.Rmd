@@ -1,0 +1,76 @@
+---
+title: "Analysis Check Separation"
+author: "Anna Talucci"
+date: "2025-11-03"
+output: html_document
+---
+
+
+
+```{r}
+# Install the package if you haven't already
+# install.packages("detectseparation")
+library(detectseparation)
+library(tidyverse)
+```
+
+# Data
+
+```{r}
+allData = read_csv("../outputs/2025-10-30_LC_Site_MultiIndexForModel.csv")
+```
+
+
+```{r}
+allData
+```
+```{r}
+( allData1 = allData %>% 
+  mutate(tx_num = case_when(
+    tx=="burned" ~ 1,
+    TRUE ~ 0
+  )) %>%
+  relocate(ID, tx, tx_num)
+)
+```
+
+mutate(xburn = case_when(
+      is.na(interval1) ~ "one",
+      is.na(interval2) ~ "two",
+      TRUE ~ "three"
+    )) %>%
+# check
+
+```{r}
+# Example data (replace with your own data)
+# Assume 'outcome' is 0/1 and 'treatment' is "control"/"treatment"
+data(allData, package = "detectseparation")
+# Let's say we want to check separation for the 'NV' (neovasculature) variable
+# against the binary outcome 'HG' (histologic grade)
+```
+
+```{r}
+# Run the glm with the detect_separation method
+separation_check <- glm(tx_num ~ nbrt1_post + csi_post + mirbi_post + nbr_post + vi45_post + nbrt1_diff + swir2_diff + thermal_diff + ID, data = allData1, family = binomial("logit"),
+                        method = "detect_separation")
+
+# Print the result
+print(separation_check)
+
+```
+
+```{r}
+
+
+separation_check <- allData1 %>%
+  group_by(ID) %>%
+  group_map(~ glm(
+    tx_num ~ nbrt1_post + csi_post + mirbi_post + nbr_post +
+             vi45_post + nbrt1_diff + swir2_diff + thermal_diff,
+    data = .x,
+    family = binomial("logit"),
+    method = "detect_separation"
+  ))
+
+print(separation_check)
+```

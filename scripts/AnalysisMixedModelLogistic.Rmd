@@ -1,0 +1,109 @@
+---
+title: "Analysis MixedModel Logistic regression"
+author: "Anna Talucci"
+date: "2025-10-30"
+output: html_document
+---
+
+# Packages
+
+```{r}
+library(tidymodels)  # for the tune package, along with the rest of tidymodels
+
+library(tidyverse)
+library(purrr)
+library(stringr)
+
+library(lme4)
+```
+
+# Data
+
+```{r}
+allData = read_csv("../outputs/2025-10-30_LC_Site_MultiIndexForModel.csv")
+```
+
+# View Data
+
+```{r}
+( bi_data = allData %>% dplyr::select(-tx4) %>% drop_na() %>% mutate(tx = as.factor(tx)) )
+( multi_data = allData %>% dplyr::select(-ID, -tx) %>% drop_na() %>% mutate(tx4 = as.factor(tx4)) )
+#( deltaData = allData %>% dplyr::select(contains("diff"), tx) %>%  drop_na() %>% mutate(tx = as.factor(tx)) )
+#( postData= allData %>% dplyr::select(-row_id) %>% dplyr::select(-contains("diff")) %>% drop_na() %>% mutate(tx = as.factor(tx)) )
+```
+```{r}
+unique(multi_data$tx4)
+```
+
+```{r}
+(df_scaled1 <- bi_data %>%
+  mutate(across(where(is.numeric), ~ (.-mean(.))/sd(.)))
+)
+
+```
+```{r}
+(df_scaled2 <- df %>%
+  mutate(across(where(is.numeric), scale))
+)
+
+```
+
+```{r}
+unique(df_scaled$ID)
+```
+
+```{r}
+df_scaled %>% filter(ID=="plot_numeric_predictors")
+```
+
+```{r}
+(df_scaled_multi <- multi_data %>%
+  mutate(across(where(is.numeric), ~ (.-mean(.))/sd(.))) 
+)
+
+```
+# 
+
+```{r}
+library(caret)
+nzv <- nearZeroVar(df_scaled2, saveMetrics = TRUE)
+nzv[nzv$nzv, ]    # columns that are near-zero variance
+
+```
+
+```{r}
+num <- df_scaled2 %>% dplyr::select(where(is.numeric))  # numeric predictors only
+cor_mat <- cor(num, use = "pairwise.complete.obs")
+which(abs(cor_mat) > 0.95, arr.ind = TRUE)  # pairs with |r|>0.95
+
+```
+
+# Mixed Model
+```{r}
+# build formula same way you did, for example:
+form <- as.formula("tx ~ . - ID + (1 | ID)")
+
+# fixed effect part only
+fixed_form <- reformulate(attr(terms(form, data=df_scaled2), "term.labels"))
+X <- model.matrix(fixed_form, data = df_scaled2)
+
+# check rank and which columns are (near-)dependent
+Matrix::rankMatrix(X)            # rank
+ncol(X)                          # number of columns
+which(colSums(is.na(X))>0)       # any NA-only columns
+caret::findLinearCombos(as.data.frame(X))  # returns combos to remove (if caret installed)
+
+```
+
+```{r}
+
+
+# Full model with random intercept for site
+full_mod <- glmer(
+  tx ~ . - ID + (1 | ID),
+  data = df_scaled,
+  family = binomial(link = "logit"),
+  control = glmerControl(optimizer = "bobyqa")
+)
+
+```

@@ -1,0 +1,82 @@
+---
+title: "Assign fire year to points"
+author: "Anna Talucci"
+date: "2025-10-22"
+output: html_document
+---
+
+# Overview
+
+
+# Packages
+
+```{r}
+library(tidyverse)
+library(sf)
+```
+
+# Data
+
+
+```{r}
+cafires = st_read("../outputs/boundaries/firePerimeters/CanadaFires1986-2021.shp")
+```
+
+```{r}
+akfires = st_read("../outputs/boundaries/firePerimeters/AK4326Fires1986-2021.shp")
+```
+
+```{r}
+points_can = st_read("../data/2025-10-22_SamplePoints/2025-10-22_stratifiedCoreAboveCanada.shp")
+```
+
+## Function to make points
+
+```{r}
+df_to_sf <- function(x){
+  st_as_sf(x, coords = c("lon","lat"), crs = 4326, remove = FALSE)
+}
+```
+
+# Check projection
+
+```{r}
+st_crs(points_can) == st_crs(cafires)
+```
+
+
+```{r}
+( points_can_proj = st_transform(points_can, st_crs(cafires)) )
+```
+
+```{r}
+st_crs(points_can_proj) == st_crs(cafires)
+```
+
+# join
+
+```{r}
+( cafire_subAttributes = cafires %>% dplyr::select(YEAR, NFIREID, PRENAME, NA_L2NAME) )
+```
+```{r}
+joinPointsPeimetersCan = st_join(points_can_proj, cafire_subAttributes)
+```
+
+```{r}
+joinPointsPeimetersCan
+```
+
+```{r}
+( burnedPointsCan = joinPointsPeimetersCan %>% 
+    drop_na(YEAR) %>%
+    rename(fireYr = YEAR)
+)
+```
+
+```{r}
+sort(unique(burnedPointsCan$fireYr))
+```
+
+```{r}
+st_write(burnedPointsCan, "../outputs/2025-10-22_AboveCoreCanadaPointsFireYear.shp", driver="ESRI Shapefile")
+```

@@ -1,0 +1,46 @@
+---
+title: "Explore Sampled Muti-Index Data"
+author: "Anna Talucci"
+date: "2025-09-26"
+output: html_document
+---
+
+```{r clear environment, include=FALSE}
+rm(list=ls())
+```
+
+# Overview
+
+Explore Multi-Index Sampled data
+
+https://www.tidymodels.org/start/tuning/
+
+
+# Packages
+
+```{r}
+# Load necessary packages
+library(tidyverse)
+```
+
+
+# Load list of csv files
+
+```{r}
+core_list = list.files(path="../data/MultiIndexSample/CORE", pattern='*.csv', full.names = TRUE)
+#fisl_fwi_list
+```
+
+# Read and Combine
+
+```{r}
+csv_rbind <- function(file_list) {
+  csv_data <- purrr::map_dfr(file_list, read_csv)
+  return(csv_data)
+}
+
+```
+
+```{r}
+(core = csv_rbind(core_list))
+```
