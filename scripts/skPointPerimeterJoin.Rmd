@@ -33,6 +33,7 @@ sk
 
 
 ## Function to make points
+
 ```{r}
 df_to_sf <- function(x){
   st_as_sf(x, coords = c("lon","lat"), crs = 4326, remove = FALSE)
@@ -40,6 +41,7 @@ df_to_sf <- function(x){
 ```
 
 ## Drop Lat Lon NA and convert to shapefile 
+
 ```{r}
 ( skpts = sk %>% 
     df_to_sf() )
@@ -137,4 +139,24 @@ unique(sort(three$lag2))
 ```
 
 
+# Back to points
 
+```{r}
+( points = dfLag %>% 
+    df_to_sf() )
+```
+
+```{r}
+unique(points$TimeSinceFire)
+```
+```{r}
+( points_oneYrPost = points %>% 
+    filter(TimeSinceFire == "1") %>%
+    mutate(fireYr = maxYr))
+```
+```{r}
+sort(unique(points_oneYrPost$fireYr))
+```
+```{r}
+st_write(points_oneYrPost, "../outputs/2025-10-21_SK_pointsPostFire_WGS84.shp", driver="ESRI Shapefile")
+```

@@ -15,6 +15,7 @@ Prioritize Canadian Landsat Scenes for Angela's albedo processing.
 ```{r}
 library(sf)
 library(tidyverse)
+library(mapview)
 ```
 
 # Data
@@ -78,7 +79,7 @@ ecozones_wgs84
 ( direScenes = join2 %>% 
     st_drop_geometry() %>% 
     drop_na(NA_L2NAME) %>% 
-    select(PATH, ROW, PR, ECO_NAME, NA_L2NAME, Region) %>% 
+    dplyr::select(PATH, ROW, PR, ECO_NAME, NA_L2NAME, Region) %>% 
     filter(!duplicated(PR))
   )
 ```
@@ -86,3 +87,54 @@ ecozones_wgs84
 ```{r}
 write.csv(direScenes, '../outputs/landsatScenes/2025-05-14_CanadaDIREPriorityABoVERegion.csv', row.names=F)
 ```
+
+
+# Map View
+```{r}
+( NWT_scenes = join2 %>% 
+    drop_na(NA_L2NAME) %>% 
+    dplyr::select(PATH, ROW, PR, ECO_NAME, NA_L2NAME, Region) %>% 
+    filter(!duplicated(PR)) %>%
+    filter(Region == "Core Region") %>%
+    filter(ECO_NAME == "Northwest Territories taiga")
+  )
+```
+
+```{r}
+( NCST_scenes = join2 %>% 
+    drop_na(NA_L2NAME) %>% 
+    dplyr::select(PATH, ROW, PR, ECO_NAME, NA_L2NAME, Region) %>% 
+    filter(!duplicated(PR)) %>%
+    filter(Region == "Core Region") %>%
+    filter(ECO_NAME == "Northern Canadian Shield taiga")
+  )
+```
+
+```{r}
+mapview( NWT_scenes)
+```
+```{r}
+st_write(NCST_scenes, "../outputs/LS_scenes/NCST_Above_scenes.shp", driver = "ESRI Shapefile", append = FALSE)
+```
+
+```{r}
+st_write(NWT_scenes, "../outputs/LS_scenes/NWT_Above_scenes.shp", driver = "ESRI Shapefile", append = FALSE)
+```
+
+```{r}
+NWT_scenes_df =  NWT_scenes %>% st_drop_geometry()
+```
+
+```{r}
+NCST_scenes_df =  NCST_scenes %>% st_drop_geometry()
+```
+
+```{r}
+write.csv(NCST_scenes_df, '../outputs/landsatScenes/2025-05-28_NCSTABoVERegionScenes.csv', row.names=F)
+```
+
+```{r}
+write.csv(NWT_scenes_df, '../outputs/landsatScenes/2025-05-28_NWTABoVERegionScenes.csv', row.names=F)
+```
+
+
