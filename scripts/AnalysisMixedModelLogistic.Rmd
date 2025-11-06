@@ -4,6 +4,9 @@ author: "Anna Talucci"
 date: "2025-10-30"
 output: html_document
 ---
+# Overview
+
+This was part of model exploration, comparison, and selection. There is clear separation in the data between control and burn, therefore logistic regression or multinomial regression is not a viable option.
 
 # Packages
 
@@ -107,3 +110,159 @@ full_mod <- glmer(
 )
 
 ```
+
+## Logistic regression in tidy models
+✅ Advantages of this approach
+
+Handles small sample size or perfect separation
+
+Automatically scales numeric variables
+
+Uses cross-validation to pick the best penalty
+
+Provides sparse coefficients → easier to interpret
+
+Fully integrates with the tidymodels workflow
+
+```{r}
+# Define your data
+set.seed(123)
+split <- initial_split(df, prop = 0.8)
+train_data <- training(split)
+test_data  <- testing(split)
+
+# define recipe and standarize data
+rec <- recipe(tx ~ ., data = train_data) %>%  # replace tx with your outcome
+  step_normalize(all_numeric_predictors())    # scales all numeric columns
+
+# Define a LASSO logistic regression model
+lasso_spec <- logistic_reg(
+  penalty = tune(),  # LASSO regularization strength
+  mixture = 1        # mixture = 1 → pure LASSO, 0 → Ridge
+) %>%
+  set_engine("glmnet") %>%
+  set_mode("classification")
+
+# Combine recipe + model into a workflow
+lasso_wf <- workflow() %>%
+  add_recipe(rec) %>%
+  add_model(lasso_spec)
+
+# cross validation
+cv_splits <- vfold_cv(train_data, v = 10)
+
+# tune
+# Create a grid of penalty values (can be log-spaced)
+penalty_grid <- grid_regular(penalty(range = c(-4, 0)), levels = 50)
+
+lasso_tune <- tune_grid(
+  lasso_wf,
+  resamples = cv_splits,
+  grid = penalty_grid,
+  metrics = metric_set(roc_auc, accuracy)
+)
+
+# See best penalty
+best_penalty <- select_best(lasso_tune, metric = "roc_auc")
+
+best_penalty
+
+# Finalize workflow
+final_wf <- finalize_workflow(lasso_wf, best_penalty)
+
+# Fit on full training data
+final_fit <- fit(final_wf, data = train_data)
+
+# use on test set
+preds <- predict(final_fit, test_data, type = "prob") %>%
+  bind_cols(test_data)
+
+roc_auc(preds, truth = tx, .pred_burned)  # replace .pred_1 with your positive class
+
+
+# extract selected predictors
+final_fit %>%
+  pull_workflow_fit() %>%
+  tidy() %>%
+  filter(estimate != 0)
+
+```
+
+# Mutinomial Model
+
+```{r}
+set.seed(123)
+df = multi_data
+# Make sure outcome is a factor
+df$tx3 <- factor(df$tx3)
+
+# Split data
+split <- initial_split(df, prop = 0.8)
+train_data <- training(split)
+test_data  <- testing(split)
+
+# Recipe
+rec <- recipe(tx3 ~ ., data = train_data) %>%
+  step_normalize(all_numeric_predictors())
+
+# Multinomial logistic regression with glmnet
+multi_spec <- multinom_reg(
+  penalty = tune(),  # optional for LASSO
+  mixture = 1        # LASSO
+) %>%
+  set_engine("glmnet") %>%
+  set_mode("classification")
+
+# Workflow
+multi_wf <- workflow() %>%
+  add_recipe(rec) %>%
+  add_model(multi_spec)
+
+# Cross-validation
+cv_splits <- vfold_cv(train_data, v = 5)
+
+# Tuning penalty (optional)
+grid <- grid_regular(penalty(range = c(-4, 0)), levels = 20)
+multi_tune <- tune_grid(
+  multi_wf,
+  resamples = cv_splits,
+  grid = grid,
+  metrics = metric_set(roc_auc, accuracy)
+)
+
+# Select best lambda
+best_penalty <- select_best(multi_tune, metric = "roc_auc")
+best_penalty
+# Finalize workflow
+final_wf <- finalize_workflow(multi_wf, best_penalty)
+final_fit <- fit(final_wf, data = train_data)
+
+# Predict probabilities on test set
+predict(final_fit, test_data, type = "prob")
+
+preds <- predict(final_fit, test_data, type = "prob") %>%
+  bind_cols(test_data)
+preds
+
+# Predicted classes as a factor
+pred_class <- predict(final_fit, test_data, type = "class")$.pred_class
+
+# Compute accuracy
+accuracy_vec(truth = test_data$tx3, estimate = pred_class)
+
+#prob_cols <- names(pred_probs)[startsWith(names(pred_probs), ".pred_")]
+
+#roc_auc(
+ # pred_probs,
+  #truth = y,
+  #all_of(prob_cols),
+  #estimator = "macro"
+#)
+
+final_fit %>%
+  pull_workflow_fit() %>%
+  tidy() %>%
+  filter(estimate != 0)
+
+```
+
