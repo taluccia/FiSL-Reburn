@@ -33,13 +33,45 @@ allData
   relocate(ID, tx, tx_num)
 )
 ```
+# View Correlations
 
-mutate(xburn = case_when(
-      is.na(interval1) ~ "one",
-      is.na(interval2) ~ "two",
-      TRUE ~ "three"
-    )) %>%
-# check
+```{r}
+cor_matrix <- cor(df_scaled %>% dplyr::select(where(is.numeric)))
+findCorrelation(cor_matrix, cutoff = 0.9)
+
+```
+
+```{r}
+cv_fit$glmnet.fit
+
+```
+
+```{r}
+(cor_matrix <- cor(df_scaled %>% dplyr::select(where(is.numeric)), use = "pairwise.complete.obs") )
+
+```
+
+```{r}
+findCorrelation(cor_matrix, cutoff = 0.9)
+```
+
+```{r}
+
+
+high_corr_idx <- findCorrelation(cor_matrix, cutoff = 0.9, names = FALSE)
+high_corr_names <- colnames(cor_matrix)[high_corr_idx]
+high_corr_names
+
+```
+
+```{r}
+
+library(corrplot)
+corrplot(cor_matrix, method = "color", tl.cex = 0.7)
+```
+
+
+# check Separation
 
 ```{r}
 # Example data (replace with your own data)
