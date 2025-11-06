@@ -1,0 +1,82 @@
+---
+title: "Organize SK Multi Index"
+author: "Anna Talucci"
+date: "2025-10-21"
+output: html_document
+---
+
+
+# Overview
+
+# Load Packages
+
+# Read in Data
+
+```{r}
+sk_list = list.files(path="../data/sk_multiIndex", pattern='*.csv', full.names = TRUE)
+```
+
+# Read and Combine
+
+```{r}
+
+sk = sk_list %>% 
+                map_df(~ read_csv(.x) %>% 
+                mutate(filename = tools::file_path_sans_ext(basename(.x)))) %>%
+                separate(filename, into = c("code", "file", "dataYear"), sep = "_", convert = TRUE, extra = "merge")
+```
+
+
+```{r}
+
+```
+
+
+```{r}
+sk %>% filter(fireYr %in% c(2016, 2017))
+```
+
+```{r}
+( sk_org = sk %>% 
+    filter(fireYr %in% c(2016, 2017)) %>% 
+  dplyr::select( rowId, fireYr, shldPln, burned, lat, lon, albedYr, albedo, ba:blue, csi:evi, green, mirbi:nir, red, savi, swir1:vi6t) %>%
+  mutate(postYr = fireYr + 1,
+         preYr = fireYr-1, 
+         unburnedPost = fireYr-1,
+         unburnedPre = fireYr -2) %>%
+    relocate(rowId, fireYr, postYr, preYr, unburnedPost, unburnedPre)
+)
+    
+
+```
+## Select pre/post dataframes
+
+```{r}
+sk_org %>%
+  rowwise() %>%
+  mutate(match =  (dataYear %in% postYear)) %>%
+  filter(match) %>% # Keep only rows where any match occurs
+  mutate(match_type = case_when(
+    dataYear %in% postYear ~ "post")) 
+```
+
+    dplyr::select(row_id, dataYear, maxYr, postYear, countYr, ba:blue, csi:green, mirbi:nir, red, savi:vi6t) %>%
+    rowwise() %>%
+  mutate(match =  (dataYear %in% postYear)) %>%
+  filter(match) %>% # Keep only rows where any match occurs
+  mutate(match_type = case_when(
+    dataYear %in% postYear ~ "post")) %>%
+    filter(blue!=-9999.0	) %>%
+    filter(nbrt1 !=-9999.0) %>%
+  mutate(tx="burned") %>%
+    rename_with(~ paste0(.,"_post"), -row_id)
+
+
+
+
+
+
+
+
+
+

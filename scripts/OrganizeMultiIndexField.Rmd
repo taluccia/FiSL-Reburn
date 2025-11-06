@@ -1,0 +1,193 @@
+---
+title: "OrganizeMultiIndex field"
+author: "Anna Talucci"
+date: "2025-10-06"
+output: html_document
+---
+
+# Packages
+
+```{r}
+library(tidyverse)
+
+```
+
+
+
+# Data
+
+```{r}
+lc_site = read_csv("../outputs/2025-10-06_LC_Site_reburns.csv")
+```
+
+```{r}
+field_List = list.files("../data/2025-10-06_FieldMultiIndex", pattern=".csv$", full.names=TRUE)
+```
+
+```{r}
+
+field_df = field_List %>% 
+                map_df(~ read_csv(.x) %>% 
+                mutate(filename = tools::file_path_sans_ext(basename(.x)))) %>%
+                separate(filename, into = c("code", "file", "dataYear"), sep = "_", convert = TRUE, extra = "merge") %>% dplyr::select(-"system:index", -".geo")
+```
+
+
+
+# View
+
+```{r}
+field_df
+```
+
+```{r}
+names(field_df)
+```
+
+## Add variables to field site data
+
+```{r}
+( lc_site1 = lc_site %>% 
+    rename(ID = site_ID) %>% 
+  mutate(postfire = fireYr + 1,
+         prefire = fireYr - 1,
+         interval1 = fireYr-burnYr2,
+         interval2 = burnYr2-burnYr3) %>%
+    mutate(interval_class = case_when(
+    is.na(interval1) ~ "long",
+    interval1 < 5 ~ "rapid",
+    interval1 < 35 ~ "short",
+    interval1 >= 36 & interval1 <= 99 ~ "medium",
+    TRUE ~ "long"   # default fallback
+  )) %>%
+    mutate(preunburn = case_when(
+    interval_class == "rapid" ~ burnYr2 - 3,
+    fireYr==2015 ~ 2014,
+    TRUE ~ fireYr - 3
+  )) %>%
+    mutate(postunburn = case_when(
+    interval_class == "rapid" ~ burnYr2 - 2,
+    TRUE ~ prefire
+  )) %>%
+    mutate(xburn = case_when(
+      is.na(interval1) ~ "one",
+      is.na(interval2) ~ "two",
+      TRUE ~ "three"
+    )) %>%
+    mutate(reburn = case_when(
+      is.na(interval1) ~ "one",
+      TRUE ~ "reburn"
+    )) %>%
+    rename(fireYr1 = fireYr, fireYr2 = burnYr2, fireYr3 = burnYr3) %>%
+    dplyr::select(-xburned, -diff_burn1_burn2, -diff_burn2_burn3) %>%
+    relocate(ID, fireYr1, fireYr2, fireYr3, interval1, interval2, xburn, preunburn, postunburn, prefire, postfire, interval_class) 
+    )
+```
+
+## Join Index data to field data
+
+```{r}
+( field_df1 = field_df %>%
+    full_join(lc_site1, by ="ID") %>%
+    dplyr::select(-contains(".x"), -pixel_qa) %>% 
+    rename_with(~ str_remove_all(.x, "\\.[y]$")) %>%
+    relocate(ID, fireYr1, fireYr2, fireYr3, interval1, interval2, xburn, preunburn, postunburn, prefire, postfire, interval_class) %>%
+    dplyr::select(-fireYr, -burnYr2, -xburned, -code, -file)
+  )
+
+```
+
+
+### Split data
+
+#### Burned 
+
+```{r}
+( postfire = field_df1 %>% 
+    filter(postfire == dataYear) %>%
+    mutate(binary = "burned") %>%
+  rename_with(~ paste0(., "_post"), .cols = 13:35)
+  )
+```
+
+```{r}
+( prefire = field_df1 %>% 
+    filter(prefire == dataYear) %>%
+    mutate(binary = "burned") %>%
+    dplyr::select(ID, ba:vi6t) %>%
+  rename_with(~ paste0(., "_pre"), .cols = 2:24)
+  )
+```
+
+#### Unburned
+
+```{r}
+( postunburned = field_df1 %>% 
+    filter(postunburn == dataYear) %>%
+    mutate(binary = "unburned") %>%
+  rename_with(~ paste0(., "_post"), .cols = 13:35)
+  )
+```
+
+```{r}
+( preunburned = field_df1 %>% 
+    filter(preunburn == dataYear) %>%
+    mutate(binary = "unburned") %>%
+    dplyr::select(ID, ba:vi6t) %>%
+  rename_with(~ paste0(., "_pre"), .cols = 2:24)
+  )
+```
+
+
+
+## Join
+
+```{r}
+( burned = postfire %>% 
+  full_join(prefire, by="ID") %>%
+  mutate(across(
+    ends_with("_pre"),
+    ~ . - get(str_replace(cur_column(), "_pre$", "_post")),
+    .names = "{col}_diff")) %>% 
+  rename_with(~ str_replace(.x, "_pre_diff$", "_diff"), ends_with("_pre_diff"))
+)
+```
+
+```{r}
+( unburned = postunburned %>% 
+  full_join(preunburned, by="ID") %>%
+  mutate(across(
+    ends_with("_pre"),
+    ~ . - get(str_replace(cur_column(), "_pre$", "_post")),
+    .names = "{col}_diff")) %>% 
+  rename_with(~ str_replace(.x, "_pre_diff$", "_diff"), ends_with("_pre_diff")) %>%
+    dplyr::select(-xburn) %>%
+    mutate(xburn = "zero",
+           reburn = "unburned")
+)
+```
+
+
+
+## Recombine filterted data
+
+```{r}
+
+( combine_join = bind_rows(burned, unburned) )
+```
+
+
+```{r}
+write_csv(combine_join, "../outputs/2025-11-05_LC_Site_MultiIndex.csv")
+```
+
+## drop unneeded columns
+
+```{r}
+(df_model = combine_join %>% dplyr::select(ID, binary, xburn, reburn, ba_post:vi6t_post, ba_diff:vi6t_diff) %>%
+   rename(tx = binary, tx4=xburn))
+```
+
+```{r}
+write_csv(df_model, "../outputs/2025-11-05_LC_Site_MultiIndexForModel.csv")
+```
