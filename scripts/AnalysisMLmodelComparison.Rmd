@@ -52,37 +52,37 @@ library(stringr)
 # Data
 
 ```{r}
-allData = read_csv("../outputs/2025-11-05_LC_Site_MultiIndexForModel.csv")
+allData = read_csv("../outputs/2025-12-05_LC_Site_MultiIndex.csv")
 ```
 
 
 # Recode 0/1 response
+```{r}
+allData
+```
+
+
+```{r}
+allData %>% 
+   filter(if_any(everything(), is.na))
+```
 
 ```{r}
 ( allData1 = allData %>%
-  mutate(across(where(is.numeric), ~ (.-mean(.))/sd(.))) %>% # scale data
+    dplyr::select(id, site_ID,  binary, ba_post:vi6t_post, ba_diff:vi6t_diff) %>%
   mutate(tx_num = case_when( # recode response to 0/1
-    tx=="burned" ~ 1,
+    binary=="burned" ~ 1,
     TRUE ~ 0
   )) %>%
-    mutate(reburn_num = case_when( # recode response to 0/1
-    reburn=="one" ~ 1,
-    reburn=="reburn" ~ 2,
-    TRUE ~ 0
-  )) %>%
-  relocate(ID, tx, tx_num, reburn, reburn_num)
+  relocate(id, binary, tx_num) %>%
+    drop_na()
 )
 ```
 
 # View Data
 
-```{r}
-allData1
-```
 
-```{r}
-unique(allData1$tx4)
-```
+
 
 # check class balance 
 
@@ -99,13 +99,18 @@ prop.table(table(allData1$reburn))
 ```
 
 # Select Columns for modeling
+```{r}
+allData1
+```
 
 ```{r}
-( bi_data = allData1 %>% dplyr::select(-tx, -tx4, -reburn, -reburn_num) %>% drop_na() %>% mutate(tx_num = as.factor(tx_num)) )
-( multi_data = allData1 %>% dplyr::select(-ID, -tx) %>% drop_na() %>% mutate(tx4 = as.factor(tx4)) )
-#( deltaData = allData %>% dplyr::select(contains("diff"), tx) %>%  drop_na() %>% mutate(tx = as.factor(tx)) )
-#( postData= allData %>% dplyr::select(-row_id) %>% dplyr::select(-contains("diff")) %>% drop_na() %>% mutate(tx = as.factor(tx)) )
+( bi_data = allData1 %>% 
+    dplyr::select(-binary, -site_ID) %>% 
+    mutate(tx_num = as.factor(tx_num)) %>%
+    rename(ID=id))
+
 ```
+
 
 # Machine Learning model comparison
 
@@ -219,23 +224,162 @@ best_models <- results_df %>%
 print(best_models)
 ```
 ```{r eval=FALSE, include=FALSE}
-write.csv(best_models, '../outputs/MLselection/2025-11-05_MLSelection.csv', row.names=F)
+write.csv(best_models, '../outputs/MLselection/2025-12-05_MLSelection.csv', row.names=F)
 ```
 
-## XGBoost  Model2
+## XGBoost  Model6
 
 ```{r}
 ( xgb_best = results_df %>%
   filter(model=="xgb") %>%
-  filter(.config == "Preprocessor1_Model02") %>%
+  filter(.config == "Preprocessor1_Model06") %>%
   arrange(desc(mean))
 )
 ```
 
 ```{r eval=FALSE, include=FALSE}
-write.csv(xgb_best, '../outputs/MLselection/2025-11-06_XGBbest_metrics.csv', row.names=F)
+write.csv(xgb_best, '../outputs/MLselection/2025-12-05_XGBbest_metrics.csv', row.names=F)
 ```
 
+# Finalize Model to save as RDS
+
+```{r}
+xgb_res <- tune_results$xgb
+class(xgb_res)
+xgb_metrics <- collect_metrics(xgb_res)
+
+# Check what you have
+# View(xgb_metrics) or print(xgb_metrics)
+
+best_xgb_row <- xgb_metrics %>%
+  filter(.metric == "roc_auc") %>%
+  slice_max(mean, n = 1)
+
+best_xgb_row
+
+```
+
+```{r}
+param_cols <- setdiff(
+  names(best_xgb_row),
+  c(".metric", "mean", "n", "std_err", ".estimator", ".config")
+)
+
+best_xgb_params <- best_xgb_row %>%
+  dplyr::select(all_of(param_cols))
+
+best_xgb_params
+
+```
+
+```{r}
+final_xgb_wf <- finalize_workflow(xgb_wf, best_xgb_params)
+
+```
+
+```{r}
+final_xgb_fit <- final_xgb_wf %>%
+  fit(data = df_train)
+
+
+```
+
+```{r}
+extract_fit_parsnip(final_xgb_fit)$fit$levels
+```
+
+
+```{r}
+saveRDS(final_xgb_fit, "../model/2025-12-05_final_xgb_binary_model.rds")
+
+```
+
+# Predict on test set 
+
+```{r}
+( test_pred <- predict(final_xgb_fit, df_test) %>%
+  bind_cols(df_test %>% dplyr::select(tx_num))
+)
+
+```
+
+```{r}
+cm <- conf_mat(test_pred, truth = tx_num, estimate = .pred_class)
+cm
+
+```
+
+```{r}
+conf_matrix <- matrix(c(50, 3,
+                        0, 45),
+                      nrow = 2, byrow = TRUE)
+
+
+```
+
+
+```{r}
+library(reshape2)
+
+conf_matrix <- matrix(c(50, 3,
+                        0, 45),
+                      nrow = 2, byrow = TRUE)
+
+# Add class labels
+classes <- c("Unburned", "Burned")
+rownames(conf_matrix) <- classes  # Predicted
+colnames(conf_matrix) <- classes  # Truth
+
+# Convert to data frame for ggplot
+conf_df <- melt(conf_matrix)
+conf_df
+colnames(conf_df) <- c("Predicted", "Truth", "Count")
+conf_df$Percentage <- (conf_df$Count / sum(conf_matrix)) * 100
+conf_df <- conf_df %>%
+  mutate(
+    fill_color = case_when(
+      Count == 0  ~ "#1F3D3D",
+      Count == 3  ~ "#1F3D3D",
+      Count == 45 ~ "#127878",
+      TRUE        ~ "#E0F0F0"
+    )
+  )
+# Create the heatmap
+cf_plot = ggplot(conf_df, aes(x = as.factor(Truth), y = as.factor(Predicted), fill = fill_color)) +
+  geom_tile(color = "white", linewidth = 1) +
+  #geom_text(aes(label = Count), size = 6, fontface = "bold") +
+  geom_text(aes(label = sprintf("%d\n(%.1f%%)", Count, Percentage),
+              color = after_scale(ifelse(fill > "#888888",  "black", "white"))), 
+          size = 8, fontface = "bold") +
+  #scale_fill_viridis_c(name = "Count", option = "rocket") +
+   scale_fill_identity() +
+  #scale_fill_manual(values = c("#1F3D3D",  "#E0F0F0", "#127878", "#1F3D3D")) +
+  #scale_fill_gradient(low = "#fff7ec", high = "#7F0000", name = "Count") +
+  #scale_y_discrete(limits = rev(classes)) +  # Reverse y-axis for standard format
+  labs(title = "Confusion Matrix",
+       x = "Truth",
+       y = "Prediction") +
+  theme_minimal(base_size = 14) +
+  theme(
+    plot.title = element_text(hjust = 0.5, face = "bold", size = 22),
+    axis.text = element_text(size=18, face = "bold"),
+    axis.text.y = element_text(angle = 90, hjust = 0.5), 
+    axis.title = element_text(size=20, face = "bold"),
+    panel.grid = element_blank(),
+    legend.position = "none"
+  ) +
+  coord_fixed()  # Keep cells square
+
+cf_plot
+# Optional: Save for poster
+# ggsave("confusion_matrix.png", width = 8, height = 7, dpi = 300)
+```
+
+```{r}
+ggsave("../figures/ConfusionMatrixBurnUnburn.png", plot = cf_plot, width = 5, height =5, units = c("in"), dpi=600, bg = "white" )
+```
+
+#  **DELETE**
 ## RF  Model3
 
 ```{r}
@@ -262,6 +406,13 @@ rf_best
 ( rf_final_wf <- finalize_workflow(rf_wf, rf_best) ) # 2. Finalize the workflow with those parameters
 
 ( rf_final_fit <- fit(rf_final_wf, data = df_train) ) # 🧠 3. Fit the finalized model on the full training data
+
+```
+
+```{r}
+rf_final_fit %>%
+  extract_fit_parsnip() %>%
+  vip(num_features = 20)
 
 ```
 
@@ -355,6 +506,14 @@ xgb_best
 
 ```
 
+```{r}
+xgb_final_fit %>%
+  extract_fit_parsnip() %>%
+  vip(num_features = 20)
+
+```
+
+### 📈 predict test set
 
 ```{r}
 set.seed(123)
@@ -368,8 +527,9 @@ set.seed(123)
 
 ```
 
+### 📈  Evaluate on the test set
 ```{r}
-# 📈 5. Evaluate on the test set
+
 xgb_metrics <- xgb_preds %>%
   yardstick::metrics(truth = tx_num, estimate = .pred_class)
 xgb_metrics
@@ -409,9 +569,11 @@ class_metrics_xgb(xgb_preds, truth = tx_num, estimate = .pred_class)
 ```
 
 ```{r}
-conf_mat(rf_preds, truth = tx_num, estimate = .pred_class)
-autoplot(conf_mat(rf_preds, truth = tx_num, estimate = .pred_class), type = "heatmap")
+conf_mat(xgb_preds, truth = tx_num, estimate = .pred_class)
+autoplot(conf_mat(xgb_preds, truth = tx_num, estimate = .pred_class), type = "heatmap")
 ```
+
+
 
 ### 💾 6. (Optional) Save model for later use
 
