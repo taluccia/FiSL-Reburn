@@ -1,0 +1,309 @@
+---
+title: "Organize Multi Index Field for 1984-2023"
+author: "Anna Talucci"
+date: "2025-12-05"
+output: html_document
+---
+
+
+# Packages
+
+```{r}
+library(tidyverse)
+
+```
+
+
+
+# Data
+
+```{r}
+lc_site = read_csv("../outputs/2025-10-06_LC_Site_reburns.csv")
+```
+
+```{r}
+field_List = list.files("../data/2025-12-05_FieldMultiIndex", pattern=".csv$", full.names=TRUE)
+```
+
+```{r}
+
+field_df = field_List %>% 
+                map_df(~ read_csv(.x) %>% 
+                mutate(filename = tools::file_path_sans_ext(basename(.x)))) %>%
+                separate(filename, into = c("code", "file", "dataYear"), sep = "_", convert = TRUE, extra = "merge") %>% dplyr::select(-"system:index", -".geo")
+```
+
+
+
+# View
+
+```{r}
+field_df
+```
+
+```{r}
+names(field_df)
+```
+
+## Add variables to field site data
+
+
+```{r}
+( lc_site1 = lc_site %>% 
+  mutate(postfire1 = fireYr + 1,
+         prefire1 = fireYr - 1,
+         postfire2 = burnYr2 + 1,
+         prefire2 = burnYr2 - 1,
+         interval1 = fireYr-burnYr2,
+         interval2 = burnYr2-burnYr3, 
+         preunburn2 = prefire2 - 3, 
+         postunburn2 = prefire2 - 2) %>%
+    mutate(interval_class = case_when(
+    is.na(interval1) ~ "long",
+    interval1 < 5 ~ "rapid",
+    interval1 < 35 ~ "short",
+    interval1 >= 36 & interval1 <= 99 ~ "medium",
+    TRUE ~ "long"   # default fallback
+  )) %>%
+    mutate(preunburn1 = case_when(
+    interval_class == "rapid" ~ burnYr2 - 3,
+    fireYr==2015 ~ 2014,
+    TRUE ~ fireYr - 3
+  )) %>%
+    mutate(postunburn1 = case_when(
+    interval_class == "rapid" ~ burnYr2 - 2,
+    TRUE ~ prefire1
+  )) %>%
+    mutate(xburn = case_when(
+      is.na(interval1) ~ "one",
+      is.na(interval2) ~ "two",
+      TRUE ~ "three"
+    )) %>%
+    mutate(reburn = case_when(
+      is.na(interval1) ~ "one",
+      TRUE ~ "reburn"
+    )) %>%
+    rename(fireYr1 = fireYr, fireYr2 = burnYr2, fireYr3 = burnYr3) %>%
+    dplyr::select(-xburned, -diff_burn1_burn2, -diff_burn2_burn3) %>%
+    relocate(site_ID, fireYr1, fireYr2, fireYr3, interval1, interval2, xburn, preunburn1, postunburn1, preunburn2, postunburn2, prefire2, postfire1, prefire2, postfire2, interval_class) 
+    )
+```
+
+```{r}
+sort(unique(lc_site1$fireYr2))
+sort(unique(lc_site1$fireYr3))
+```
+
+## Site level fire details for multi index and ML modeling 
+
+```{r}
+( site_fireYr1 = lc_site1 %>% 
+    dplyr::select(site_ID, fireYr1, preunburn1, postunburn1, prefire1, postfire1, xburn, reburn, interval_class) %>%
+    mutate(id = paste0(site_ID, "_fyr1")) %>%
+    relocate(id) %>%
+    dplyr::rename_with(~ sub("[0-9]+$", "", .x))
+    
+)
+```
+
+```{r}
+( site_fireYr2 = lc_site1 %>% 
+    drop_na(fireYr2) %>%
+    filter(fireYr2 >= 1986) %>%
+    dplyr::select(site_ID, fireYr2, preunburn2, postunburn2, prefire2, postfire2, xburn, reburn, interval_class) %>%
+    mutate(id = paste0(site_ID, "_fyr2")) %>%
+    relocate(id) %>%
+    dplyr::rename_with(~ sub("[0-9]+$", "", .x))
+)
+```
+
+```{r}
+( lc_bind = bind_rows(site_fireYr1, site_fireYr2) )
+```
+
+## Join Index data to field data
+
+```{r}
+( field_mi_df = field_df %>% 
+  dplyr::select(ID:blue, csi:evi, green, mirbi:nir, red, savi, swir1:vi6t, dataYear) %>%
+  rename(site_ID = ID) )
+```
+```{r}
+( site_fireYr2_df1 = field_mi_df %>%
+    full_join( site_fireYr2, by ="site_ID", relationship = "many-to-many") %>%
+  relocate(id, site_ID, fireYr, preunburn, postunburn, prefire, postfire, xburn, reburn, interval_class, dataYear) %>%
+  drop_na()
+)
+```
+
+```{r}
+( site_fireYr1_df1 = field_mi_df %>%
+    full_join( site_fireYr1, by ="site_ID", relationship = "many-to-many") %>%
+  relocate(id, site_ID, fireYr, preunburn, postunburn, prefire, postfire, xburn, reburn, interval_class, dataYear) %>%
+  drop_na()
+)
+```
+
+```{r}
+( field_mi_df1 = field_mi_df %>%
+    full_join(lc_bind, by ="site_ID", relationship = "many-to-many") %>%
+    #dplyr::select(-contains(".x"), -pixel_qa) %>% 
+    #rename_with(~ str_remove_all(.x, "\\.[y]$")) %>%
+    relocate(id, site_ID, fireYr, preunburn, postunburn, prefire, postfire, xburn, reburn, interval_class, dataYear) 
+  )
+
+```
+
+### Step 2: Split Data into pre/post burned/unburned
+
+```{r}
+postfire_function = function(df_full) {
+  postfire_df = df_full %>% 
+    filter(postfire == dataYear) %>%
+    mutate(binary = "burned") %>%
+  rename_with(~ paste0(., "_post"), .cols = 12:34)
+  
+  return(postfire_df)
+}
+
+prefire_function = function(df_full) {
+  prefire_df = df_full %>% 
+    filter(prefire == dataYear) %>%
+    mutate(binary = "burned") %>%
+    dplyr::select(id, ba:vi6t) %>%
+  rename_with(~ paste0(., "_pre"), .cols = 2:24)
+  
+  return(prefire_df)
+}
+
+postunburned_function = function(df_full) {
+  postunburned_df = df_full %>% 
+    filter(postunburn == dataYear) %>%
+    mutate(binary = "unburned") %>%
+  rename_with(~ paste0(., "_post"), .cols = 12:34)
+  
+  return(postunburned_df)
+}
+
+preunburned_function = function(df_full) {
+  preunburned_df = df_full %>% 
+    filter(preunburn == dataYear) %>%
+    mutate(binary = "unburned") %>%
+    dplyr::select(id, ba:vi6t) %>%
+  rename_with(~ paste0(., "_pre"), .cols = 2:24)
+  
+  return(preunburned_df)
+}
+```
+
+#### Apply Function
+
+```{r}
+( postfire <- postfire_function(field_mi_df1) )
+( prefire <- prefire_function(field_mi_df1) )
+( postunburned <- postunburned_function(field_mi_df1) )
+( preunburned <- preunburned_function(field_mi_df1) )
+```
+
+```{r}
+( postfire_fyr1 <- postfire_function(site_fireYr1_df1) )
+( prefire_fyr1 <- prefire_function(site_fireYr1_df1) )
+( postunburned_fyr1 <- postunburned_function(site_fireYr1_df1) )
+( preunburned_fyr1 <- preunburned_function(site_fireYr1_df1) )
+```
+
+```{r}
+( postfire_fyr2 <- postfire_function(site_fireYr2_df1) )
+( prefire_fyr2 <- prefire_function(site_fireYr2_df1) )
+( postunburned_fyr2 <- postunburned_function(site_fireYr2_df1) )
+( preunburned_fyr2 <- preunburned_function(site_fireYr2_df1) )
+```
+
+### Step 3: Rejoin split data frames Function
+
+
+```{r}
+burned_join_func = function(post, pre){
+  burned_df = post %>% 
+  full_join(pre, by="id") %>%
+  mutate(across(
+    ends_with("_pre"),
+    ~ . - get(str_replace(cur_column(), "_pre$", "_post")),
+    .names = "{col}_diff")) %>% 
+  rename_with(~ str_replace(.x, "_pre_diff$", "_diff"), ends_with("_pre_diff"))
+  
+  return(burned_df)
+}
+
+unburned_join_func = function(post, pre){
+  unburned_df = post %>% 
+  full_join(pre, by="id") %>%
+  mutate(across(
+    ends_with("_pre"),
+    ~ . - get(str_replace(cur_column(), "_pre$", "_post")),
+    .names = "{col}_diff")) %>% 
+  rename_with(~ str_replace(.x, "_pre_diff$", "_diff"), ends_with("_pre_diff")) %>%
+    dplyr::select(-xburn) %>%
+    mutate(xburn = "zero",
+           reburn = "unburned")
+  return(unburned_df)
+}
+
+```
+
+
+```{r}
+burned_df <- burned_join_func(postfire, prefire)
+unburned_df <- unburned_join_func(postunburned, preunburned)
+```
+
+
+```{r}
+burned_fyr1_df <- burned_join_func(postfire_fyr1, prefire_fyr1)
+unburned_fyr1_df <- unburned_join_func(postunburned_fyr1, preunburned_fyr1)
+```
+
+```{r}
+burned_fyr2_df <- burned_join_func(postfire_fyr2, prefire_fyr2)
+unburned_fyr2_df <- unburned_join_func(postunburned_fyr2, preunburned_fyr2)
+```
+
+## Recombine filterted data
+
+```{r}
+( combine = bind_rows(burned_df, unburned_df) )
+```
+
+
+```{r}
+( combine_fyr1 = bind_rows(burned_fyr1_df, unburned_fyr1_df) )
+( combine_fyr2 = bind_rows(burned_fyr2_df, unburned_fyr2_df) )
+```
+
+```{r}
+combine_fyr1 %>% 
+   filter(if_any(everything(), is.na))
+```
+
+```{r}
+combine_fyr2 %>% 
+   filter(if_any(everything(), is.na))
+```
+
+```{r}
+( bind_combine_fyr1_fyr2 = bind_rows(combine_fyr1, combine_fyr2) )
+```
+
+```{r}
+bind_combine_fyr1_fyr2 %>% 
+   filter(if_any(everything(), is.na))
+```
+
+```{r}
+write_csv(bind_combine_fyr1_fyr2, "../outputs/2025-12-05_LC_Site_MultiIndex.csv")
+```
+
+
+
+
+

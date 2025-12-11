@@ -1,0 +1,312 @@
+---
+title: "Analysis ML model Reburn"
+author: "Anna Talucci"
+date: "2025-12-03"
+output: html_document
+---
+
+
+
+```{r clear environment, include=FALSE}
+rm(list=ls())
+```
+
+# Overview
+
+ML Model Selection
+
+https://www.tidymodels.org/start/tuning/
+
+**NOTES:**
+- “Separation poses no problems for estimating a random forest model. The reason separation is a problem for logistic regression is that the likelihood increases as the absolute value of the coefficient increases. Random forests don’t share this trait because the model isn’t estimated by optimizing an objective function in this manner.” [StackExchange link](https://stats.stackexchange.com/questions/441205/doesnt-separation-in-data-affects-random-forest?utm_source=chatgpt.com)
+- Ecology application of RF, emphasising very high classification accuracy of RF in ecological datasets: “Advantages of RF … include (1)  high classification accuracy …” (Cutler et al. 2007)
+
+# Packages
+
+```{r}
+
+#library(FactoMineR)  # For PCA
+#library(factoextra)  # For visualization
+library(rpart)
+library(rpart.plot)# for visualizing a decision tree
+
+library(tidymodels)  # for the tune package, along with the rest of tidymodels
+library(finetune)
+# Helper packages
+library(rpart.plot)  
+library(vip)         # for variable importance plots
+library(MASS)
+library(randomForest)
+library(caret)
+library(ranger)
+library(xgboost)
+library(kernlab)
+library(yardstick)
+library(rsample)
+
+library(tidyverse)
+library(purrr)
+library(stringr)
+```
+
+
+# Data
+
+```{r}
+allData = read_csv("../outputs/2025-11-05_LC_Site_MultiIndexForModel.csv")
+```
+
+
+# Recode 0/1 response
+
+```{r}
+( allData1 = allData %>%
+  mutate(across(where(is.numeric), ~ (.-mean(.))/sd(.))) %>% # scale data
+  mutate(tx_num = case_when( # recode response to 0/1
+    tx=="burned" ~ 1,
+    TRUE ~ 0
+  )) %>%
+    mutate(reburn_num = case_when( # recode response to 0/1
+    reburn=="one" ~ 1,
+    reburn=="reburn" ~ 2,
+    TRUE ~ 0
+  )) %>%
+    mutate(tx4_num = case_when( # recode response to 0/1
+    tx4=="one" ~ 1,
+    tx4=="two" ~ 2,
+    tx4=="three" ~ 3,
+    TRUE ~ 0
+  )) %>%
+  relocate(ID, tx, tx_num, tx4, tx4_num, reburn, reburn_num)
+)
+```
+
+# View Data
+
+```{r}
+allData1
+```
+
+```{r}
+unique(allData1$tx4)
+```
+
+# check class balance 
+
+✅  Balanced
+
+```{r}
+table(allData1$tx4)
+prop.table(table(allData1$tx4))
+```
+
+```{r}
+table(allData1$reburn)
+prop.table(table(allData1$reburn))
+```
+
+# Select Columns for modeling
+
+```{r}
+
+( reburn_data = allData1 %>% dplyr::select(-tx, -tx_num, -tx4, -tx4_num, -reburn) %>% drop_na()  %>% filter(reburn_num !=0) %>% mutate(reburn_num = as.factor(reburn_num)) )
+
+
+
+```
+
+
+
+
+# Machine Learning model comparison
+
+```{r}
+set.seed(123)
+
+df <- reburn_data
+
+# Split data
+#df_split <- initial_split(df, prop = 0.8, strata = tx_num)
+df_split <- group_initial_split(df, group = ID, prop = 0.8)
+df_train <- training(df_split)
+df_test <- testing(df_split)
+# 5-fold cross-validation
+#cv_folds <- vfold_cv(df_train, v = 5, strata = tx_num)
+#cv_folds <- group_vfold_cv(df_train,group = ID, v = 5) # <- column defining the groups
+cv_folds <- group_vfold_cv(df_train, group = ID, v = 5)
+
+# Recipe: normalize only if needed
+
+#base_recipe <- recipe(tx_num ~ ., data = df_train) %>%
+  #step_zv(all_predictors()) %>%
+  #step_dummy(all_nominal_predictors())
+base_recipe <- recipe(reburn_num ~ ., data = df_train) %>%
+  step_zv(all_predictors()) %>%
+  step_novel(ID) %>%
+  step_dummy(all_nominal_predictors())
+# Model-specific preprocessing
+norm_recipe <- base_recipe %>%
+  step_normalize(all_numeric_predictors())
+# Logistic Regression
+log_spec <- logistic_reg() %>%
+  set_engine("glm") %>%
+  set_mode("classification")
+# SVM Linear
+svm_linear_spec <- svm_linear(cost = tune()) %>%
+  set_engine("kernlab") %>%
+  set_mode("classification")
+# SVM Radial
+svm_rbf_spec <- svm_rbf(cost = tune(), rbf_sigma = tune()) %>%
+  set_engine("kernlab") %>%
+  set_mode("classification")
+# Decision Tree
+tree_spec <- decision_tree(cost_complexity = tune(), tree_depth = tune()) %>%
+  set_engine("rpart") %>%
+  set_mode("classification")
+# Random Forest
+rf_spec <- rand_forest(mtry = tune(), min_n = tune(), trees = 500) %>%
+  set_engine("ranger", importance = "impurity") %>%
+  set_mode("classification")
+# Gradient Boosted Trees (XGBoost)
+xgb_spec <- boost_tree(trees = 500, learn_rate = tune(), mtry = tune(), tree_depth = tune()) %>%
+  set_engine("xgboost") %>%
+  set_mode("classification")
+# Workflows
+log_wf <- workflow() %>%
+  add_model(log_spec) %>%
+  add_recipe(base_recipe)
+svm_linear_wf <- workflow() %>%
+  add_model(svm_linear_spec) %>%
+  add_recipe(norm_recipe)
+svm_rbf_wf <- workflow() %>%
+  add_model(svm_rbf_spec) %>%
+  add_recipe(norm_recipe)
+tree_wf <- workflow() %>%
+  add_model(tree_spec) %>%
+  add_recipe(base_recipe)
+rf_wf <- workflow() %>%
+  add_model(rf_spec) %>%
+  add_recipe(base_recipe)
+xgb_wf <- workflow() %>%
+  add_model(xgb_spec) %>%
+  add_recipe(base_recipe)
+# Tune each model
+#my_metrics <- yardstick::metric_set(yardstick::roc_auc, yardstick::accuracy)
+my_metrics <- yardstick::metric_set(
+  yardstick::roc_auc,      # discrimination
+  yardstick::accuracy,     # overall correctness
+  yardstick::recall,
+  yardstick::bal_accuracy, # balanced correctness
+  yardstick::sens,         # sensitivity (recall)
+  yardstick::spec,         # specificity
+  yardstick::precision,    # precision
+  yardstick::f_meas,       # F1 score
+  yardstick::pr_auc,       # PR AUC
+  yardstick::brier_class   # calibration metric
+)
+tune_results <- list(
+  log = fit_resamples(log_wf, resamples = cv_folds, metrics = my_metrics, control = control_resamples(save_pred = TRUE)),
+  
+  svm_linear = tune_grid(svm_linear_wf, resamples = cv_folds, grid = 10, metrics = my_metrics),
+  
+  svm_rbf = tune_grid(svm_rbf_wf, resamples = cv_folds, grid = 10, metrics = my_metrics),
+  
+  tree = tune_grid(tree_wf, resamples = cv_folds, grid = 10, metrics = my_metrics),
+  
+  rf = tune_grid(rf_wf, resamples = cv_folds, grid = 10, metrics = my_metrics),
+  
+  xgb = tune_grid(xgb_wf, resamples = cv_folds, grid = 10, metrics = my_metrics)
+)
+# Compare models
+library(purrr)
+results_df <- map_dfr(tune_results, ~collect_metrics(.x), .id = "model")
+# Select best model based on highest ROC AUC
+best_models <- results_df %>%
+  filter(.metric == "roc_auc") %>%
+  group_by(model) %>%
+  slice_max(mean, n = 1) %>%
+  arrange(desc(mean))
+print(best_models)
+
+```
+
+```{r eval=FALSE, include=FALSE}
+write.csv(best_models, '../outputs/MLselection/2025-12-02_MLSelectionMultinomialBurnOnly.csv', row.names=F)
+```
+
+## XGBoost  Model
+
+```{r}
+( xgb_best = results_df %>%
+  filter(model=="xgb") %>%
+  filter(.config == "Preprocessor1_Model09") %>%
+  arrange(desc(mean))
+)
+```
+
+```{r eval=FALSE, include=FALSE}
+write.csv(xgb_best, '../outputs/MLselection/2025-12-02_XGBbestMultinomialBurnOnly_metrics.csv', row.names=F)
+```
+
+# Finalize Model to save as RDS
+
+```{r}
+xgb_res <- tune_results$xgb
+class(xgb_res)
+xgb_metrics <- collect_metrics(xgb_res)
+
+# Check what you have
+# View(xgb_metrics) or print(xgb_metrics)
+
+best_xgb_row <- xgb_metrics %>%
+  filter(.metric == "roc_auc") %>%
+  slice_max(mean, n = 1)
+
+best_xgb_row
+
+```
+
+```{r}
+param_cols <- setdiff(
+  names(best_xgb_row),
+  c(".metric", "mean", "n", "std_err", ".estimator", ".config")
+)
+
+best_xgb_params <- best_xgb_row %>%
+  dplyr::select(all_of(param_cols))
+
+best_xgb_params
+
+```
+
+```{r}
+final_xgb_wf <- finalize_workflow(xgb_wf, best_xgb_params)
+
+```
+
+```{r}
+final_xgb_fit <- final_xgb_wf %>%
+  fit(data = df_train)
+
+
+```
+
+```{r}
+saveRDS(final_xgb_fit, "../model/final_xgb_bin_reburn_model.rds")
+
+```
+
+# Predict on test set 
+
+```{r}
+( test_pred <- predict(final_xgb_fit, df_test) %>%
+  bind_cols(df_test %>% dplyr::select(tx4_num))
+)
+
+```
+
+```{r}
+cm <- conf_mat(test_pred, truth = tx4_num, estimate = .pred_class)
+cm
+
+```
